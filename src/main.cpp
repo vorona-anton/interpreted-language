@@ -1,4 +1,5 @@
 
+#include "lexy/dsl/base.hpp"
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -239,6 +240,7 @@ struct func_decl {
 };
 
 using statement = std::variant<ast::func_decl, ast::expr_ptr>;
+using statement_vector = std::vector<statement>;
 } // namespace ast
 
 namespace {
@@ -407,40 +409,54 @@ struct program {
   static constexpr auto whitespace = dsl::inline_<grammar::whitespace>;
   static constexpr auto rule =
       dsl::terminator(dsl::eof).opt_list(dsl::p<statement> + dsl::semicolon);
-  static constexpr auto value = lexy::as_list<std::vector<ast::statement>>;
+  static constexpr auto value = lexy::as_list<ast::statement_vector>;
 };
 } // namespace grammar
+
+int parse_file(char const *path, ast::statement_vector &out_statements) {
+  auto file = lexy::read_file<lexy::utf8_char_encoding>(path);
+  if (not file) {
+    fmt::println("Couldn't open the file! Error ID: {}", (int)file.error());
+    return 1;
+  }
+
+  auto result =
+      lexy::parse<grammar::program>(file.buffer(), lexy_ext::report_error);
+  if (not result.has_value())
+    return 1;
+
+  out_statements = result.value();
+  return 0;
+}
+
+void run_statements(ast::env &env, ast::statement_vector &statements) {
+  for (auto &&statement : statements) {
+    std::visit(
+        [&]<typename T>(T &value) {
+          if constexpr (std::same_as<T, ast::expr_ptr>) {
+            value->eval(env);
+          } else {
+            value.set(env);
+          }
+        },
+        statement);
+  }
+}
 } // namespace
+
 
 auto main(int argc, char **argv) -> int {
   std::string raw_input;
   ast::env env{};
 
   if (argc == 2) {
-    auto file = lexy::read_file<lexy::utf8_char_encoding>(argv[1]);
-    if (not file) {
-      fmt::println("Couldn't open the file! Error ID: {}", (int)file.error());
-      return 1;
+    ast::statement_vector statements;
+    int failure = parse_file(argv[1], statements);
+    if (failure) {
+        return 1;
     }
 
-    auto result =
-        lexy::parse<grammar::program>(file.buffer(), lexy_ext::report_error);
-    if (not result.has_value())
-      return 1;
-
-    auto res = result.value();
-
-    for (auto &&statement : res) {
-      std::visit(
-          [&]<typename T>(T &value) {
-            if constexpr (std::same_as<T, ast::expr_ptr>) {
-              value->eval(env);
-            } else {
-              value.set(env);
-            }
-          },
-          statement);
-    }
+    run_statements(env, statements);
 
     return 0;
   }
@@ -456,22 +472,12 @@ auto main(int argc, char **argv) -> int {
     }
 
     auto input = lexy::string_input<lexy::utf8_char_encoding>(raw_input);
-    auto result = lexy::parse<grammar::program>(input, lexy_ext::report_error);
-    if (not result.has_value())
+    auto parse_result = lexy::parse<grammar::program>(input, lexy_ext::report_error);
+    if (not parse_result.has_value())
       return 1;
 
-    auto res = result.value();
+    auto statements = parse_result.value();
 
-    for (auto &&statement : res) {
-      std::visit(
-          [&]<typename T>(T &value) {
-            if constexpr (std::same_as<T, ast::expr_ptr>) {
-              value->eval(env);
-            } else {
-              value.set(env);
-            }
-          },
-          statement);
-    }
+    run_statements(env, statements);
   }
 }
