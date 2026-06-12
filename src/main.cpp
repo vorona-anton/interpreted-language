@@ -1,5 +1,7 @@
 
 #include "lexy/dsl/base.hpp"
+#include "lexy/dsl/brackets.hpp"
+#include "lexy/dsl/production.hpp"
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -335,7 +337,7 @@ struct var {
 };
 
 struct expr : lexy::expression_production {
-  static constexpr auto atom = dsl::p<number> | dsl::p<var>;
+  static constexpr auto atom = dsl::parenthesized(dsl::recurse<expr>) | dsl::p<number> | dsl::p<var>;
 
   struct call : dsl::postfix_op {
     static constexpr auto op = dsl::op<ast::postfix::op_t::value>(
