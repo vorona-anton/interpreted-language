@@ -26,6 +26,8 @@ namespace ast {
 constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
 template <typename T> using ptr = std::shared_ptr<T>;
 using expr_ptr = ptr<struct expression>;
+using statement_ptr = ptr<struct statement>;
+using statement_vector = std::vector<statement_ptr>;
 
 struct value {
   virtual ~value() noexcept = default;
@@ -62,6 +64,11 @@ struct env {
 struct expression {
   virtual ~expression() = default;
   virtual auto eval(env &) -> double = 0;
+};
+
+struct statement {
+  virtual ~statement() = default;
+  virtual auto exec(env &) -> void = 0;
 };
 
 struct literal : expression {
@@ -225,13 +232,13 @@ struct postfix : expression {
   }
 };
 
-struct func_decl {
+struct func_decl : statement {
   std::string identifier;
   function body;
   explicit func_decl(std::string identifier, function body)
       : identifier{LEXY_MOV(identifier)}, body{LEXY_MOV(body)} {}
 
-  auto set(env &env) -> void {
+  auto exec(env &env) -> void override {
     if (env.get<f64>(identifier)) {
       fmt::println("'{}' is a variable", identifier);
       return;
@@ -241,8 +248,13 @@ struct func_decl {
   }
 };
 
-using statement = std::variant<ast::func_decl, ast::expr_ptr>;
-using statement_vector = std::vector<statement>;
+struct expression_statement : statement {
+  expr_ptr expr;
+  explicit expression_statement(expr_ptr expr) : expr{expr} {}
+  auto exec(env &env) -> void override {
+    expr->eval(env);
+  }
+};
 } // namespace ast
 
 namespace {
@@ -398,13 +410,18 @@ struct function_body {
 struct function_declaration {
   static constexpr auto rule =
       kw_fn >> dsl::p<identifier> + dsl::p<function_body>;
-  static constexpr auto value = lexy::construct<ast::func_decl>;
+  static constexpr auto value = lexy::new_<ast::func_decl, ast::statement_ptr>;
+};
+
+struct expression_statement {
+  static constexpr auto rule = dsl::p<expr>;
+  static constexpr auto value = lexy::new_<ast::expression_statement, ast::statement_ptr>;
 };
 
 struct statement {
   static constexpr auto rule =
-      dsl::p<function_declaration> | dsl::else_ >> dsl::p<expr>;
-  static constexpr auto value = lexy::construct<ast::statement>;
+      dsl::p<function_declaration> | dsl::else_ >> dsl::p<expression_statement>;
+  static constexpr auto value = lexy::forward<ast::statement_ptr>;
 };
 
 struct program {
@@ -433,15 +450,7 @@ int parse_file(char const *path, ast::statement_vector &out_statements) {
 
 void run_statements(ast::env &env, ast::statement_vector &statements) {
   for (auto &&statement : statements) {
-    std::visit(
-        [&]<typename T>(T &value) {
-          if constexpr (std::same_as<T, ast::expr_ptr>) {
-            value->eval(env);
-          } else {
-            value.set(env);
-          }
-        },
-        statement);
+    statement->exec(env);
   }
 }
 } // namespace
