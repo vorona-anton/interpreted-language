@@ -49,6 +49,7 @@ struct function : value {
 
 struct env {
   std::unordered_map<std::string, ptr<value>> vars;
+  double return_value = nan;
 
   template <typename T> auto get(std::string const &identifier) -> ptr<T> {
     ptr<value> name = has(identifier) ? vars.at(identifier) : nullptr;
@@ -248,6 +249,14 @@ struct func_decl : statement {
   }
 };
 
+struct return_statement : statement {
+  expr_ptr expr;
+  explicit return_statement(expr_ptr expr) : expr{expr} {}
+  auto exec(env &env) -> void override {
+    env.return_value = expr->eval(env);
+  }
+};
+
 struct expression_statement : statement {
   expr_ptr expr;
   explicit expression_statement(expr_ptr expr) : expr{expr} {}
@@ -336,9 +345,10 @@ constexpr auto id_rule = dsl::identifier(dsl::unicode::xid_start_underscore,
                                          dsl::unicode::xid_continue);
 
 constexpr auto kw_fn = LEXY_KEYWORD("fn", id_rule);
+constexpr auto kw_return = LEXY_KEYWORD("return", id_rule);
 
 struct identifier {
-  static constexpr auto rule = id_rule.reserve(kw_fn);
+  static constexpr auto rule = id_rule.reserve(kw_fn, kw_return);
   static constexpr auto value = lexy::as_string<std::string>;
 };
 
@@ -413,6 +423,11 @@ struct function_declaration {
   static constexpr auto value = lexy::new_<ast::func_decl, ast::statement_ptr>;
 };
 
+struct return_statement {
+  static constexpr auto rule = kw_return >> dsl::p<expr>;
+  static constexpr auto value = lexy::new_<ast::return_statement, ast::statement_ptr>;
+};
+
 struct expression_statement {
   static constexpr auto rule = dsl::p<expr>;
   static constexpr auto value = lexy::new_<ast::expression_statement, ast::statement_ptr>;
@@ -420,7 +435,7 @@ struct expression_statement {
 
 struct statement {
   static constexpr auto rule =
-      dsl::p<function_declaration> | dsl::else_ >> dsl::p<expression_statement>;
+      dsl::p<function_declaration> | dsl::p<return_statement> | dsl::else_ >> dsl::p<expression_statement>;
   static constexpr auto value = lexy::forward<ast::statement_ptr>;
 };
 
@@ -451,6 +466,10 @@ int parse_file(char const *path, ast::statement_vector &out_statements) {
 void run_statements(ast::env &env, ast::statement_vector &statements) {
   for (auto &&statement : statements) {
     statement->exec(env);
+    // If encountered return statement, stop running all other statements
+    if (std::dynamic_pointer_cast<ast::return_statement>(statement)) {
+      break;
+    }
   }
 }
 } // namespace
