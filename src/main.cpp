@@ -72,6 +72,16 @@ struct statement {
   virtual auto exec(env &) -> void = 0;
 };
 
+void run_statements(env &env, statement_vector &statements) {
+  for (auto &&statement : statements) {
+    statement->exec(env);
+    // If encountered return statement, stop running all other statements
+    if (std::dynamic_pointer_cast<struct return_statement>(statement)) {
+      break;
+    }
+  }
+}
+
 struct literal : expression {
   double value = 0;
   explicit literal(double val) : value{val} {}
@@ -462,18 +472,7 @@ int parse_file(char const *path, ast::statement_vector &out_statements) {
   out_statements = result.value();
   return 0;
 }
-
-void run_statements(ast::env &env, ast::statement_vector &statements) {
-  for (auto &&statement : statements) {
-    statement->exec(env);
-    // If encountered return statement, stop running all other statements
-    if (std::dynamic_pointer_cast<ast::return_statement>(statement)) {
-      break;
-    }
-  }
-}
 } // namespace
-
 
 auto main(int argc, char **argv) -> int {
   std::string raw_input;
@@ -486,7 +485,7 @@ auto main(int argc, char **argv) -> int {
         return 1;
     }
 
-    run_statements(env, statements);
+    ast::run_statements(env, statements);
 
     return 0;
   }
