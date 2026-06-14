@@ -1,7 +1,4 @@
 
-#include "lexy/dsl/base.hpp"
-#include "lexy/dsl/brackets.hpp"
-#include "lexy/dsl/production.hpp"
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -9,7 +6,6 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #define LEXY_HAS_UNICODE_DATABASE 1
@@ -72,15 +68,7 @@ struct statement {
   virtual auto exec(env &) -> void = 0;
 };
 
-void run_statements(env &env, statement_vector &statements) {
-  for (auto &&statement : statements) {
-    statement->exec(env);
-    // If encountered return statement, stop running all other statements
-    if (std::dynamic_pointer_cast<struct return_statement>(statement)) {
-      break;
-    }
-  }
-}
+void run_statements(env &env, statement_vector &statements);
 
 struct literal : expression {
   double value = 0;
@@ -274,6 +262,16 @@ struct expression_statement : statement {
     expr->eval(env);
   }
 };
+
+void run_statements(env &env, statement_vector &statements) {
+  for (auto &&statement : statements) {
+    statement->exec(env);
+    // If encountered return statement, stop running all other statements
+    if (std::dynamic_pointer_cast<return_statement>(statement)) {
+      break;
+    }
+  }
+}
 } // namespace ast
 
 namespace {
