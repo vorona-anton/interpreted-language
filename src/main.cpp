@@ -1,7 +1,9 @@
 
+#include "lexy/dsl/brackets.hpp"
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -36,11 +38,11 @@ struct f64 : value {
 
 struct function : value {
   std::vector<ptr<struct variable>> args;
-  expr_ptr result;
+  statement_vector body;
 
   function() = default;
-  explicit function(std::vector<ptr<struct variable>> args, expr_ptr result)
-      : args{LEXY_MOV(args)}, result{LEXY_MOV(result)} {}
+  explicit function(std::vector<ptr<struct variable>> args, statement_vector body)
+      : args{LEXY_MOV(args)}, body{LEXY_MOV(body)} {}
 };
 
 struct env {
@@ -227,7 +229,8 @@ struct postfix : expression {
       set_var(var, value);
     }
 
-    return func->result->eval(func_env);
+    run_statements(func_env, func->body);
+    return func_env.return_value;
   }
 };
 
@@ -420,8 +423,13 @@ struct arg_list {
       lexy::as_list<std::vector<ast::ptr<ast::variable>>>;
 };
 
+struct scope_declaration {
+  static constexpr auto rule  = dsl::curly_bracketed.opt_list(dsl::recurse<struct statement>);
+  static constexpr auto value = lexy::as_list<ast::statement_vector>;
+};
+
 struct function_body {
-  static constexpr auto rule = dsl::p<arg_list> + LEXY_LIT("->") + dsl::p<expr>;
+  static constexpr auto rule = dsl::p<arg_list> + dsl::p<scope_declaration>;
   static constexpr auto value = lexy::construct<ast::function>;
 };
 
