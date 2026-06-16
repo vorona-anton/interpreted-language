@@ -1,9 +1,6 @@
-
-#include "lexy/dsl/brackets.hpp"
 #include <iostream>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -440,12 +437,12 @@ struct function_declaration {
 };
 
 struct return_statement {
-  static constexpr auto rule = kw_return >> dsl::p<expr>;
+  static constexpr auto rule = kw_return >> dsl::p<expr> + dsl::semicolon;
   static constexpr auto value = lexy::new_<ast::return_statement, ast::statement_ptr>;
 };
 
 struct expression_statement {
-  static constexpr auto rule = dsl::p<expr>;
+  static constexpr auto rule = dsl::p<expr> + dsl::semicolon;
   static constexpr auto value = lexy::new_<ast::expression_statement, ast::statement_ptr>;
 };
 
@@ -458,7 +455,7 @@ struct statement {
 struct program {
   static constexpr auto whitespace = dsl::inline_<grammar::whitespace>;
   static constexpr auto rule =
-      dsl::terminator(dsl::eof).opt_list(dsl::p<statement> + dsl::semicolon);
+      dsl::terminator(dsl::eof).opt_list(dsl::p<statement>);
   static constexpr auto value = lexy::as_list<ast::statement_vector>;
 };
 } // namespace grammar
