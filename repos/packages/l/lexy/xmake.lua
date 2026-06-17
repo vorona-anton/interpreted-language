@@ -17,16 +17,11 @@ package("lexy")
             package:add("defines", "LEXY_HAS_UNICODE_DATABASE=1")
         end
 
-        if package:has_tool("cxx", "cl") then
-            -- Disable warning C4702: unreachable code on msvc compiler
-            --[[Reason:
-            Compiler displays that warning for each operation within an lexy::dsl::expression_production,
-            because of include/lexy/dsl/expression.hpp(524) (last line of lexyd::_expr::_parse) being unreachable
-            These warnings can cause trouble if user enables warnings-as-errors becausethe warnings would come
-            from within the package that they don't have control over.
-            ]]
-            package:add("cxxflags", "/wd4702")
-        end
+        -- Disable warnings
+        --[[Reason:
+        Compiler may throw warnings from within the lexy headerfiles that the user has no control over
+        ]]
+        package:set("warnings", "none")
     end)
 
     on_install(function (package)

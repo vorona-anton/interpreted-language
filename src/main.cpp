@@ -7,13 +7,25 @@
 #include <utility>
 #include <vector>
 
-#define LEXY_HAS_UNICODE_DATABASE 1
+// GCC complains about a dangling pointer at lexy/action/validate.hpp:188:26,
+// but there's nothing that can be done about that, so the error has to be suppressed
+// Clang doesn't have -Wdangling-pointer flag, so it needs to be excluded
+#if defined(__GNUC__) && !defined (__clang__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
+
 #include <lexy/action/parse.hpp>
 #include <lexy/callback.hpp>
 #include <lexy/dsl.hpp>
 #include <lexy/input/file.hpp>
 #include <lexy/input/string_input.hpp>
 #include <lexy_ext/report_error.hpp>
+
+// Turn off suppression for -Wdangling-pointer
+#if defined(__GNUC__) && !defined (__clang__)
+#  pragma GCC diagnostic pop
+#endif
 
 #include "fmt/core.h"
 

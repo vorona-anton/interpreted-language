@@ -5,7 +5,7 @@ set_policy("build.warning", true)
 -- If compiling with MSVC, add flag that specifies that __cplusplus macro to use actual cpp standard
 add_cxxflags("cl::/Zc:__cplusplus")
 -- xmake-repo doesn't have the latest version of lexy, so there repos folder with redefinition of the lexy package that has newer version
-add_repositories("my-repo repos", {rootdir = os.scriptdir()})
+add_repositories("my-repo repos", {rootdir = "$(scriptdir)"})
 
 set_languages("c++23")
 
@@ -21,6 +21,7 @@ target("app")
     add_files("src/main.cpp")
 
     set_warnings("allextra", "pedantic", "error")
+    add_cxxflags("gxx::-Wno-parentheses")
 
     add_packages(app_pkgs)
 
