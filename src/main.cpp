@@ -275,6 +275,11 @@ struct expression_statement : statement {
   }
 };
 
+struct empty_statement : statement {
+  explicit empty_statement() = default;
+  auto exec(env &env) -> void override { std::ignore = env; }
+};
+
 void run_statements(env &env, statement_vector &statements) {
   for (auto &&statement : statements) {
     statement->exec(env);
@@ -458,9 +463,18 @@ struct expression_statement {
   static constexpr auto value = lexy::new_<ast::expression_statement, ast::statement_ptr>;
 };
 
+struct empty_statement {
+  struct useless_semicolon {
+    static constexpr auto name = "Unnessesary semicolon";
+  };
+
+  static constexpr auto rule = dsl::semicolon;
+  static constexpr auto value = lexy::new_<ast::empty_statement, ast::statement_ptr>;
+};
+
 struct statement {
   static constexpr auto rule =
-      dsl::p<function_declaration> | dsl::p<return_statement> | dsl::else_ >> dsl::p<expression_statement>;
+      dsl::p<function_declaration> | dsl::p<return_statement> | dsl::p<empty_statement> | dsl::else_ >> dsl::p<expression_statement>;
   static constexpr auto value = lexy::forward<ast::statement_ptr>;
 };
 
