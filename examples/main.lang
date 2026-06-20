@@ -1,0 +1,21 @@
+// This is a single line comment
+/*
+Multi-line comment
+*/
+
+// Variable declaration
+a = 5.2;
+
+// Function declaration
+fn square(x) {
+    // a isn't accessible here, prone to change
+    // Functions can be declared inside other functions
+    fn identity(x) { return x; }
+    // Return statement
+    return identity(x) * x; 
+}
+
+// report is a built-in function to print a single value to stdout
+report(square(a)); // Roughly 27.04
+report(5 / (3 - 2)); // 5
+report(identity(5)); // Should print error and return nan
