@@ -206,9 +206,12 @@ struct postfix : expression {
     }
 
     if (var_ptr->identifier == "report") {
+      auto evaluated_args = args
+        | std::views::transform([&](auto&& arg) { return arg->eval(env); })
+        | std::ranges::to<std::vector>();
       fmt::print("Report:");
-      for (auto &&arg : args)
-        fmt::print(" {}", arg->eval(env));
+      for (auto &&arg : evaluated_args)
+        fmt::print(" {}", arg);
       fmt::print("\n");
       return 0;
     }
