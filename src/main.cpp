@@ -56,7 +56,6 @@ struct function : value {
 
 struct env {
   std::unordered_map<std::string, ptr<value>> vars;
-  double return_value = nan;
 
   template <typename T> auto get(std::string const &identifier) -> ptr<T> {
     ptr<value> name = has(identifier) ? vars.at(identifier) : nullptr;
@@ -241,8 +240,12 @@ struct postfix : expression {
       set_var(var, value);
     }
 
+    try {
     run_statements(func_env, func->body);
-    return func_env.return_value;
+      return nan;
+    } catch (double return_value) {
+      return return_value;
+    }
   }
 };
 
@@ -286,10 +289,6 @@ struct empty_statement : statement {
 void run_statements(env &env, statement_vector &statements) {
   for (auto &&statement : statements) {
     statement->exec(env);
-    // If encountered return statement, stop running all other statements
-    if (std::dynamic_pointer_cast<return_statement>(statement)) {
-      break;
-    }
   }
 }
 } // namespace ast
@@ -506,7 +505,7 @@ int parse_file(char const *path, ast::statement_vector &out_statements) {
 }
 } // namespace
 
-auto main(int argc, char **argv) -> int {
+auto main(int argc, char **argv) -> int try {
   std::string raw_input;
   ast::env env{};
 
@@ -518,7 +517,6 @@ auto main(int argc, char **argv) -> int {
     }
 
     ast::run_statements(env, statements);
-
     return 0;
   }
 
@@ -541,4 +539,6 @@ auto main(int argc, char **argv) -> int {
 
     run_statements(env, statements);
   }
+} catch (double return_value) {
+  return static_cast<int>(return_value);
 }
