@@ -241,7 +241,7 @@ struct postfix : expression {
     }
 
     try {
-    run_statements(func_env, func->body);
+      run_statements(func_env, func->body);
       return nan;
     } catch (double return_value) {
       return return_value;
@@ -284,6 +284,20 @@ struct expression_statement : statement {
 struct empty_statement : statement {
   explicit empty_statement() = default;
   auto exec(env &env) -> void override { std::ignore = env; }
+};
+
+struct if_statement : statement {
+  expr_ptr condition;
+  statement_vector if_branch;
+  statement_vector else_branch;
+
+  explicit if_statement(expr_ptr condition, statement_vector if_branch, statement_vector else_branch)
+      : condition{LEXY_MOV(condition)}, if_branch{LEXY_MOV(if_branch)}, else_branch{LEXY_MOV(else_branch)} {}
+
+  auto exec(env &env) -> void override {
+    auto new_env = env;
+    run_statements(new_env, condition->eval(env) == 1 ? if_branch : else_branch);
+  }
 };
 
 void run_statements(env &env, statement_vector &statements) {
@@ -373,9 +387,12 @@ constexpr auto id_rule = dsl::identifier(dsl::unicode::xid_start_underscore,
 
 constexpr auto kw_fn = LEXY_KEYWORD("fn", id_rule);
 constexpr auto kw_return = LEXY_KEYWORD("return", id_rule);
+constexpr auto kw_if = LEXY_KEYWORD("if", id_rule);
+constexpr auto kw_else = LEXY_KEYWORD("else", id_rule);
 
 struct identifier {
-  static constexpr auto rule = id_rule.reserve(kw_fn, kw_return);
+  static constexpr auto rule =
+      id_rule.reserve(kw_fn, kw_return, kw_if, kw_else);
   static constexpr auto value = lexy::as_string<std::string>;
 };
 
@@ -474,9 +491,18 @@ struct empty_statement {
   static constexpr auto value = lexy::new_<ast::empty_statement, ast::statement_ptr>;
 };
 
+struct if_statement {
+  static constexpr auto
+      rule = kw_if >> dsl::parenthesized(dsl::p<expr>) + dsl::p<scope_declaration>
+        + kw_else + dsl::p<scope_declaration>;
+
+  static constexpr auto value = lexy::new_<ast::if_statement, ast::statement_ptr>;
+};
+
 struct statement {
-  static constexpr auto rule =
-      dsl::p<function_declaration> | dsl::p<return_statement> | dsl::p<empty_statement> | dsl::else_ >> dsl::p<expression_statement>;
+  static constexpr auto rule = dsl::p<function_declaration> | dsl::p<return_statement>
+    | dsl::p<if_statement> | dsl::p<empty_statement>
+    | dsl::else_ >> dsl::p<expression_statement>;
   static constexpr auto value = lexy::forward<ast::statement_ptr>;
 };
 
@@ -513,7 +539,7 @@ auto main(int argc, char **argv) -> int try {
     ast::statement_vector statements;
     int failure = parse_file(argv[1], statements);
     if (failure) {
-        return 1;
+      return 1;
     }
 
     ast::run_statements(env, statements);
