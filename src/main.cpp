@@ -269,7 +269,7 @@ struct return_statement : statement {
   expr_ptr expr;
   explicit return_statement(expr_ptr expr) : expr{expr} {}
   auto exec(env &env) -> void override {
-    env.return_value = expr->eval(env);
+    throw expr->eval(env);
   }
 };
 
