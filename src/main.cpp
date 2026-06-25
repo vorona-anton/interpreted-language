@@ -51,7 +51,7 @@ struct function : value {
 
   function() = default;
   explicit function(std::vector<ptr<struct variable>> args, statement_vector body)
-      : args{LEXY_MOV(args)}, body{LEXY_MOV(body)} {}
+      : args{std::move(args)}, body{std::move(body)} {}
 };
 
 struct env {
@@ -88,7 +88,7 @@ struct literal : expression {
 
 struct variable : expression {
   std::string identifier;
-  explicit variable(std::string name) : identifier{name} {}
+  explicit variable(std::string name) : identifier{std::move(name)} {}
   auto eval(env &env) -> double override {
     if (not env.has(identifier)) {
       fmt::println("Variable '{}' doesn't exist", identifier);
@@ -128,7 +128,7 @@ struct assignment : expression {
   expr_ptr lhs;
   expr_ptr rhs;
   explicit assignment(expr_ptr lhs, op_t, expr_ptr rhs)
-      : lhs{LEXY_MOV(lhs)}, rhs{LEXY_MOV(rhs)} {}
+      : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
 
   auto eval(env &env) -> double override {
     auto var = std::dynamic_pointer_cast<variable>(lhs);
@@ -150,7 +150,7 @@ struct binop : expression {
   op_t op;
 
   explicit binop(expr_ptr lhs, op_t op, expr_ptr rhs)
-      : lhs{lhs}, rhs{rhs}, op{op} {}
+      : lhs{std::move(lhs)}, rhs{std::move(rhs)}, op{op} {}
 
   auto eval(env &env) -> double override {
     switch (op) {
@@ -174,7 +174,7 @@ struct prefix : expression {
 
   expr_ptr val;
   op_t op;
-  explicit prefix(op_t op, expr_ptr val) : val{val}, op{op} {}
+  explicit prefix(op_t op, expr_ptr val) : val{std::move(val)}, op{op} {}
   auto eval(env &env) -> double override {
     switch (op) {
       using enum op_t;
@@ -193,10 +193,10 @@ struct postfix : expression {
 
   expr_ptr callee;
   std::vector<expr_ptr> args;
-  explicit postfix(expr_ptr callee, op_t) : callee{callee} {}
-  explicit postfix(expr_ptr callee, op_t, lexy::nullopt) : callee{callee} {}
+  explicit postfix(expr_ptr callee, op_t) : callee{std::move(callee)} {}
+  explicit postfix(expr_ptr callee, op_t, lexy::nullopt) : callee{std::move(callee)} {}
   explicit postfix(expr_ptr callee, op_t, std::vector<expr_ptr> args)
-      : callee{LEXY_MOV(callee)}, args{LEXY_MOV(args)} {}
+      : callee{std::move(callee)}, args{std::move(args)} {}
   auto eval(env &env) -> double override {
     auto var_ptr = std::dynamic_pointer_cast<variable>(callee);
     if (not var_ptr) {
@@ -253,7 +253,7 @@ struct func_decl : statement {
   std::string identifier;
   function body;
   explicit func_decl(std::string identifier, function body)
-      : identifier{LEXY_MOV(identifier)}, body{LEXY_MOV(body)} {}
+      : identifier{std::move(identifier)}, body{std::move(body)} {}
 
   auto exec(env &env) -> void override {
     if (env.get<f64>(identifier)) {
@@ -267,7 +267,7 @@ struct func_decl : statement {
 
 struct return_statement : statement {
   expr_ptr expr;
-  explicit return_statement(expr_ptr expr) : expr{expr} {}
+  explicit return_statement(expr_ptr expr) : expr{std::move(expr)} {}
   auto exec(env &env) -> void override {
     throw expr->eval(env);
   }
@@ -275,7 +275,7 @@ struct return_statement : statement {
 
 struct expression_statement : statement {
   expr_ptr expr;
-  explicit expression_statement(expr_ptr expr) : expr{expr} {}
+  explicit expression_statement(expr_ptr expr) : expr{std::move(expr)} {}
   auto exec(env &env) -> void override {
     expr->eval(env);
   }
@@ -292,7 +292,7 @@ struct if_statement : statement {
   statement_vector else_branch;
 
   explicit if_statement(expr_ptr condition, statement_vector if_branch, statement_vector else_branch)
-      : condition{LEXY_MOV(condition)}, if_branch{LEXY_MOV(if_branch)}, else_branch{LEXY_MOV(else_branch)} {}
+      : condition{std::move(condition)}, if_branch{std::move(if_branch)}, else_branch{std::move(else_branch)} {}
 
   auto exec(env &env) -> void override {
     auto new_env = env;
