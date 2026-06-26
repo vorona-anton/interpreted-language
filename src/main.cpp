@@ -491,10 +491,18 @@ struct empty_statement {
   static constexpr auto value = lexy::new_<ast::empty_statement, ast::statement_ptr>;
 };
 
+struct else_clause {
+  static constexpr auto rule = dsl::opt(kw_else >> dsl::p<scope_declaration>);
+  static constexpr auto value = lexy::callback<ast::statement_vector>(
+    [](lexy::nullopt) -> ast::statement_vector { return {}; },
+    lexy::forward<ast::statement_vector>,
+  );
+};
+
 struct if_statement {
   static constexpr auto
-      rule = kw_if >> dsl::parenthesized(dsl::p<expr>) + dsl::p<scope_declaration>
-        + kw_else + dsl::p<scope_declaration>;
+      rule = kw_if >> dsl::p<expr>
+        + dsl::p<scope_declaration> + dsl::p<else_clause>;
 
   static constexpr auto value = lexy::new_<ast::if_statement, ast::statement_ptr>;
 };
