@@ -231,7 +231,7 @@ struct postfix : expression {
     using namespace std::views;
     auto eval_arg = [&](expr_ptr &arg) { return arg->eval(env); };
 
-    ast::env func_env{};
+    ast::env func_env = env;
     auto set_var = [&](ptr<variable> &var, double arg) {
       return var->set(func_env, arg);
     };
@@ -495,7 +495,7 @@ struct else_clause {
   static constexpr auto rule = dsl::opt(kw_else >> dsl::p<scope_declaration>);
   static constexpr auto value = lexy::callback<ast::statement_vector>(
     [](lexy::nullopt) -> ast::statement_vector { return {}; },
-    lexy::forward<ast::statement_vector>,
+    lexy::forward<ast::statement_vector>
   );
 };
 
