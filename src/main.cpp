@@ -56,14 +56,32 @@ struct function : value {
 
 struct env {
   std::unordered_map<std::string, ptr<value>> vars;
+  env* parent = nullptr;
+
+  static auto from_parent(env& parent) -> env {
+    env child{};
+    child.parent = &parent;
+    return child;
+  }
 
   template <typename T> auto get(std::string const &identifier) -> ptr<T> {
-    ptr<value> name = has(identifier) ? vars.at(identifier) : nullptr;
+    if (vars.contains(identifier)) {
+      return std::dynamic_pointer_cast<T>(vars.at(identifier));
+    }
 
-    return std::dynamic_pointer_cast<T>(name);
+    // If identifier exists, just somewhere down the parent tree
+    if (has(identifier)) {
+      return parent->get<T>(identifier);
+    }
+
+    return nullptr;
   }
 
   auto has(std::string const &identifier) -> bool {
+    return directly_has(identifier) or (parent and parent->has(identifier));
+  }
+
+  auto directly_has(std::string const &identifier) -> bool {
     return vars.contains(identifier);
   }
 };
@@ -231,7 +249,7 @@ struct postfix : expression {
     using namespace std::views;
     auto eval_arg = [&](expr_ptr &arg) { return arg->eval(env); };
 
-    ast::env func_env = env;
+    ast::env func_env = ast::env::from_parent(env);
     auto set_var = [&](ptr<variable> &var, double arg) {
       return var->set(func_env, arg);
     };
@@ -295,7 +313,7 @@ struct if_statement : statement {
       : condition{std::move(condition)}, if_branch{std::move(if_branch)}, else_branch{std::move(else_branch)} {}
 
   auto exec(env &env) -> void override {
-    auto new_env = env;
+    ast::env new_env = ast::env::from_parent(env);
     run_statements(new_env, condition->eval(env) == 1 ? if_branch : else_branch);
   }
 };
