@@ -123,10 +123,20 @@ struct variable : expression {
     return var->value;
   }
 
-  auto set(env &env, double value) -> double {
+  auto declare(env& env, double value) -> double {
+    if (env.directly_has(identifier)) {
+      fmt::println("Variable '{}' is already declared", identifier);
+      return nan;
+    };
+
+    env.vars.insert_or_assign(identifier, std::make_shared<f64>(value));
+    return value;
+  }
+
+  auto assign(env &env, double value) -> double {
     if (not env.has(identifier)) {
-      env.vars[identifier] = std::make_shared<f64>(value);
-      return value;
+      fmt::println("Variable '{}' doesn't exist", identifier);
+      return nan;
     }
 
     auto var = env.get<f64>(identifier);
@@ -156,7 +166,7 @@ struct assignment : expression {
     }
 
     auto value = rhs->eval(env);
-    var->set(env, value);
+    var->assign(env, value);
     return value;
   }
 };
@@ -222,9 +232,10 @@ struct postfix : expression {
       return nan;
     }
 
+    using namespace std::views;
     if (var_ptr->identifier == "report") {
       auto evaluated_args = args
-        | std::views::transform([&](auto&& arg) { return arg->eval(env); })
+        | transform([&](auto&& arg) { return arg->eval(env); })
         | std::ranges::to<std::vector>();
       fmt::print("Report:");
       for (auto &&arg : evaluated_args)
@@ -246,16 +257,10 @@ struct postfix : expression {
       return nan;
     }
 
-    using namespace std::views;
-    auto eval_arg = [&](expr_ptr &arg) { return arg->eval(env); };
-
     ast::env func_env = ast::env::from_parent(env);
-    auto set_var = [&](ptr<variable> &var, double arg) {
-      return var->set(func_env, arg);
-    };
 
-    for (auto &&[var, value] : zip(arg_vars, args | transform(eval_arg))) {
-      set_var(var, value);
+    for (auto &&[var, expr] : zip(arg_vars, args)) {
+      var->declare(func_env, expr->eval(env));
     }
 
     try {
@@ -274,12 +279,23 @@ struct func_decl : statement {
       : identifier{std::move(identifier)}, body{std::move(body)} {}
 
   auto exec(env &env) -> void override {
-    if (env.get<f64>(identifier)) {
-      fmt::println("'{}' is a variable", identifier);
+    if (env.directly_has(identifier)) {
+      fmt::println("'{}' is already declared", identifier);
       return;
     };
 
     env.vars.insert_or_assign(identifier, std::make_shared<function>(body));
+  }
+};
+
+struct variable_decl : statement {
+  ptr<ast::variable> variable;
+  expr_ptr initializer;
+  explicit variable_decl(ptr<ast::variable> variable, expr_ptr initializer)
+    : variable{std::move(variable)}, initializer{std::move(initializer)} {}
+
+  auto exec(env &env) -> void override {
+    variable->declare(env, initializer->eval(env));
   }
 };
 
@@ -403,13 +419,14 @@ struct number {
 constexpr auto id_rule = dsl::identifier(dsl::unicode::xid_start_underscore,
                                          dsl::unicode::xid_continue);
 
+constexpr auto kw_let = LEXY_KEYWORD("let", id_rule);
 constexpr auto kw_fn = LEXY_KEYWORD("fn", id_rule);
 constexpr auto kw_return = LEXY_KEYWORD("return", id_rule);
 constexpr auto kw_if = LEXY_KEYWORD("if", id_rule);
 constexpr auto kw_else = LEXY_KEYWORD("else", id_rule);
 
 struct identifier {
-  static constexpr auto rule =
+      id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else);
       id_rule.reserve(kw_fn, kw_return, kw_if, kw_else);
   static constexpr auto value = lexy::as_string<std::string>;
 };
@@ -490,6 +507,11 @@ struct function_declaration {
   static constexpr auto value = lexy::new_<ast::func_decl, ast::statement_ptr>;
 };
 
+struct variable_declaration {
+  static constexpr auto rule = kw_let >> dsl::p<var> + dsl::equal_sign + dsl::p<expr>;
+  static constexpr auto value = lexy::new_<ast::variable_decl, ast::statement_ptr>;
+};
+
 struct return_statement {
   static constexpr auto rule = kw_return >> dsl::p<expr> + dsl::semicolon;
   static constexpr auto value = lexy::new_<ast::return_statement, ast::statement_ptr>;
@@ -526,7 +548,7 @@ struct if_statement {
 };
 
 struct statement {
-  static constexpr auto rule = dsl::p<function_declaration> | dsl::p<return_statement>
+  static constexpr auto rule = dsl::p<variable_declaration> | dsl::p<function_declaration> | dsl::p<return_statement>
     | dsl::p<if_statement> | dsl::p<empty_statement>
     | dsl::else_ >> dsl::p<expression_statement>;
   static constexpr auto value = lexy::forward<ast::statement_ptr>;
