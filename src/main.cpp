@@ -426,8 +426,8 @@ constexpr auto kw_if = LEXY_KEYWORD("if", id_rule);
 constexpr auto kw_else = LEXY_KEYWORD("else", id_rule);
 
 struct identifier {
+  static constexpr auto rule =
       id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else);
-      id_rule.reserve(kw_fn, kw_return, kw_if, kw_else);
   static constexpr auto value = lexy::as_string<std::string>;
 };
 
