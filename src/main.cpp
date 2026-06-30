@@ -532,7 +532,7 @@ struct empty_statement {
 };
 
 struct else_clause {
-  static constexpr auto rule = dsl::opt(kw_else >> dsl::p<scope_declaration>);
+  static constexpr auto rule = dsl::opt(kw_else >> (dsl::p<scope_declaration> | dsl::else_ >> dsl::recurse<struct if_statement>));
   static constexpr auto value = lexy::callback<ast::statement_vector>(
     [](lexy::nullopt) -> ast::statement_vector { return {}; },
     lexy::forward<ast::statement_vector>,
