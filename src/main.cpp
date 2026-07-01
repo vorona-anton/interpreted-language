@@ -245,7 +245,7 @@ struct postfix : expression {
     }
 
     if (not env.has(var_ptr->identifier)) {
-      fmt::println("Call failed, function doesn't exist");
+      fmt::println("Call to '{}' failed, function doesn't exist", var_ptr->identifier);
       return nan;
     }
 
