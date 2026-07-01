@@ -252,8 +252,12 @@ struct postfix : expression {
     auto func = env.get<function>(var_ptr->identifier);
     auto &arg_vars = func->args;
     if (arg_vars.size() != args.size()) {
-      fmt::println("Call failed, expected {} args, got {}", arg_vars.size(),
-                   args.size());
+      fmt::println(
+        "Call to '{}' failed, expected {} args, got {}",
+        var_ptr->identifier,
+        arg_vars.size(),
+        args.size()
+      );
       return nan;
     }
 
