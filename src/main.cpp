@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -194,6 +196,58 @@ struct binop : expression {
     default:
       std::unreachable();
     }
+  }
+};
+
+struct chained_comparison : expression {
+  enum class op_t : std::uint8_t {
+    lt, lte, gt, gte, eq, neq, logical_and, logical_or
+  };
+
+  std::vector<op_t> ops;
+  std::vector<expr_ptr> operands;
+
+  explicit chained_comparison() = default;
+  explicit chained_comparison(expr_ptr lhs, op_t op, expr_ptr rhs)
+    : ops{op}, operands{std::move(lhs), std::move(rhs)} {}
+
+  auto eval(env &env) -> double override {
+    using namespace std::views;
+
+    static constexpr auto equals_one = std::bind_front(std::equal_to{}, 1.0);
+    auto eval_expression = std::bind_back(&expression::eval, env);
+
+    if (ops[0] == op_t::logical_and) {
+      return std::ranges::all_of(operands, equals_one, eval_expression);
+    } else if (ops[0] == op_t::logical_or) {
+      return std::ranges::any_of(operands, equals_one, eval_expression);
+    }
+
+    double prev = std::invoke(eval_expression, operands[0]);
+
+    auto compare = [&prev](op_t op, double curr) {
+      bool result;
+      switch (op) {
+        case op_t::lt:  result = prev <  curr; break;
+        case op_t::lte: result = prev <= curr; break;
+        case op_t::gt:  result = prev >  curr; break;
+        case op_t::gte: result = prev >= curr; break;
+        case op_t::eq:  result = prev == curr; break;
+        case op_t::neq: result = prev != curr; break;
+        default:
+          std::unreachable();
+      }
+
+      prev = curr;
+      return result;
+    };
+
+    // This is written specifically such that every operand is evaluated only once and such that
+    // in expressions like `a() == b() == c()`, c() doesn't get evaluated if a() doesn't equal b()
+    return std::ranges::all_of(
+      zip_transform(compare, ops, operands | drop(1) | transform(eval_expression)),
+      std::identity{}
+    );
   }
 };
 
@@ -469,18 +523,64 @@ struct expr : lexy::expression_production {
     using operand = multiplication;
   };
 
-  struct assignment : dsl::infix_op_single {
+  struct less_than : dsl::infix_op_list {
     static constexpr auto op =
-        dsl::op<ast::assignment::op_t::value>(dsl::equal_sign);
+      dsl::op<ast::chained_comparison::op_t::lt>(dsl::not_followed_by(LEXY_LIT("<"), dsl::lit_c<'='>))
+      / dsl::op<ast::chained_comparison::op_t::lte>(LEXY_LIT("<="));
     using operand = addition;
   };
 
+  struct greater_than : dsl::infix_op_list {
+    static constexpr auto op =
+      dsl::op<ast::chained_comparison::op_t::gt>(dsl::not_followed_by(LEXY_LIT(">"), dsl::lit_c<'='>))
+      / dsl::op<ast::chained_comparison::op_t::gte>(LEXY_LIT(">="));
+    using operand = addition;
+  };
+
+  using relational = dsl::groups<less_than, greater_than>;
+
+  struct equal : dsl::infix_op_list {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::eq>(LEXY_LIT("=="));
+    using operand = relational;
+  };
+
+  // Not chainable by design
+  struct not_equal : dsl::infix_op_single {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::neq>(LEXY_LIT("!="));
+    using operand = relational;
+  };
+
+  using equality = dsl::groups<equal, not_equal>;
+
+  struct log_or : dsl::infix_op_list {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::logical_or>(LEXY_LIT("||"));
+    using operand = equality;
+  };
+
+  struct log_and : dsl::infix_op_list {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::logical_and>(LEXY_LIT("&&"));
+    using operand = log_or;
+  };
+
+  struct assignment : dsl::infix_op_single {
+    static constexpr auto op =
+        dsl::op<ast::assignment::op_t::value>(dsl::not_followed_by(dsl::equal_sign, dsl::equal_sign));
+    using operand = log_and;
+  };
+
   using operation = assignment;
-  static constexpr auto value = lexy::callback<ast::expr_ptr>(
-      lexy::forward<ast::expr_ptr>, lexy::new_<ast::assignment, ast::expr_ptr>,
+  static constexpr auto value = lexy::fold_inplace<std::unique_ptr<ast::chained_comparison>>(
+    [] { return std::make_unique<ast::chained_comparison>(); },
+    [](auto& node, ast::expr_ptr operand) { node->operands.emplace_back(LEXY_MOV(operand)); },
+    [](auto& node, ast::chained_comparison::op_t op) { node->ops.emplace_back(op); }
+  ) >> lexy::callback<ast::expr_ptr>(
+      lexy::forward<ast::expr_ptr>,
+      lexy::new_<ast::assignment, ast::expr_ptr>,
+      lexy::new_<ast::chained_comparison, ast::expr_ptr>,
       lexy::new_<ast::binop, ast::expr_ptr>,
       lexy::new_<ast::prefix, ast::expr_ptr>,
-      lexy::new_<ast::postfix, ast::expr_ptr>);
+      lexy::new_<ast::postfix, ast::expr_ptr>
+  );
 };
 
 struct expr_list {
@@ -615,7 +715,7 @@ auto main(int argc, char **argv) -> int try {
       return 1;
 
     auto statements = parse_result.value();
-
+    
     run_statements(env, statements);
   }
 } catch (double return_value) {
