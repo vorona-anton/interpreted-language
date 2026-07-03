@@ -252,7 +252,7 @@ struct chained_comparison : expression {
 };
 
 struct prefix : expression {
-  enum struct op_t { invert, plus };
+  enum struct op_t { negate, complement, invert };
 
   expr_ptr val;
   op_t op;
@@ -260,10 +260,9 @@ struct prefix : expression {
   auto eval(env &env) -> double override {
     switch (op) {
       using enum op_t;
-    case invert:
-      return -val->eval(env);
-    case plus:
-      return val->eval(env);
+    case negate: return -val->eval(env);
+    case complement: return val->eval(env);
+    case invert: return val->eval(env) != 1.0;
     default:
       std::unreachable();
     }
@@ -506,8 +505,9 @@ struct expr : lexy::expression_production {
 
   struct prefix : dsl::prefix_op {
     static constexpr auto op =
-        dsl::op<ast::prefix::op_t::plus>(dsl::lit_c<'+'>) /
-        dsl::op<ast::prefix::op_t::invert>(dsl::lit_c<'-'>);
+      dsl::op<ast::prefix::op_t::complement>(dsl::lit_c<'+'>)
+      / dsl::op<ast::prefix::op_t::negate>(dsl::lit_c<'-'>)
+      / dsl::op<ast::prefix::op_t::invert>(dsl::lit_c<'!'>);
     using operand = call;
   };
 
