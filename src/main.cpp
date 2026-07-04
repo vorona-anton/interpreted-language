@@ -225,7 +225,7 @@ struct chained_comparison : expression {
 
     double prev = std::invoke(eval_expression, operands[0]);
 
-    auto compare = [&prev](op_t op, double curr) {
+    auto compare = [&prev](op_t op, double curr) -> bool {
       bool result;
       switch (op) {
         case op_t::lt:  result = prev <  curr; break;
@@ -494,8 +494,12 @@ struct var {
       lexy::new_<ast::variable, ast::ptr<ast::variable>>;
 };
 
-struct expr : lexy::expression_production {
-  static constexpr auto atom = dsl::parenthesized(dsl::recurse<expr>) | dsl::p<number> | dsl::p<var>;
+// Expr is separated into relational, equality and expr expression_productions
+// Because lexy emits operator_group_error even when parent and child groups are on different precedence level
+// So `a < b == c < d` which should get parsed as `(a < b) == (c < d)` emits and error message
+// Which is not desired, so to avoid this, there should only be 1 group per expression production
+struct relational : lexy::expression_production {
+  static constexpr auto atom = dsl::parenthesized(dsl::recurse<struct expr>) | dsl::p<number> | dsl::p<var>;
 
   struct call : dsl::postfix_op {
     static constexpr auto op = dsl::op<ast::postfix::op_t::value>(
@@ -537,49 +541,77 @@ struct expr : lexy::expression_production {
     using operand = addition;
   };
 
-  using relational = dsl::groups<less_than, greater_than>;
-
-  struct equal : dsl::infix_op_list {
-    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::eq>(LEXY_LIT("=="));
-    using operand = relational;
-  };
-
-  // Not chainable by design
-  struct not_equal : dsl::infix_op_single {
-    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::neq>(LEXY_LIT("!="));
-    using operand = relational;
-  };
-
-  using equality = dsl::groups<equal, not_equal>;
-
-  struct log_or : dsl::infix_op_list {
-    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::logical_or>(LEXY_LIT("||"));
-    using operand = equality;
-  };
-
-  struct log_and : dsl::infix_op_list {
-    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::logical_and>(LEXY_LIT("&&"));
-    using operand = log_or;
-  };
-
-  struct assignment : dsl::infix_op_single {
-    static constexpr auto op =
-        dsl::op<ast::assignment::op_t::value>(dsl::not_followed_by(dsl::equal_sign, dsl::equal_sign));
-    using operand = log_and;
-  };
-
-  using operation = assignment;
+  using operation = dsl::groups<less_than, greater_than>;  
+  
   static constexpr auto value = lexy::fold_inplace<std::unique_ptr<ast::chained_comparison>>(
     [] { return std::make_unique<ast::chained_comparison>(); },
     [](auto& node, ast::expr_ptr operand) { node->operands.emplace_back(LEXY_MOV(operand)); },
     [](auto& node, ast::chained_comparison::op_t op) { node->ops.emplace_back(op); }
   ) >> lexy::callback<ast::expr_ptr>(
-      lexy::forward<ast::expr_ptr>,
-      lexy::new_<ast::assignment, ast::expr_ptr>,
-      lexy::new_<ast::chained_comparison, ast::expr_ptr>,
-      lexy::new_<ast::binop, ast::expr_ptr>,
-      lexy::new_<ast::prefix, ast::expr_ptr>,
-      lexy::new_<ast::postfix, ast::expr_ptr>
+    lexy::forward<ast::expr_ptr>,
+    lexy::new_<ast::chained_comparison, ast::expr_ptr>,
+    lexy::new_<ast::binop, ast::expr_ptr>,
+    lexy::new_<ast::prefix, ast::expr_ptr>,
+    lexy::new_<ast::postfix, ast::expr_ptr>
+  );
+};
+
+struct equality : lexy::expression_production {
+  static constexpr auto atom = dsl::p<relational>;
+
+  struct equal : dsl::infix_op_list {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::eq>(LEXY_LIT("=="));
+    using operand = dsl::atom;
+  };
+
+  // Not chainable by design
+  struct not_equal : dsl::infix_op_single {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::neq>(LEXY_LIT("!="));
+    using operand = dsl::atom;
+  };
+
+  using operation = dsl::groups<equal, not_equal>;
+
+  static constexpr auto value = lexy::fold_inplace<std::unique_ptr<ast::chained_comparison>>(
+    [] { return std::make_unique<ast::chained_comparison>(); },
+    [](auto& node, ast::expr_ptr operand) { node->operands.emplace_back(LEXY_MOV(operand)); },
+    [](auto& node, ast::chained_comparison::op_t op) { node->ops.emplace_back(op); }
+  ) >> lexy::callback<ast::expr_ptr>(
+    lexy::forward<ast::expr_ptr>,
+    lexy::new_<ast::chained_comparison, ast::expr_ptr>
+  );
+};
+
+struct expr : lexy::expression_production {
+  static constexpr auto atom = dsl::p<equality>;
+
+  struct log_or : dsl::infix_op_list {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::logical_or>(LEXY_LIT("||"));
+    using operand = dsl::atom;
+  };
+
+  struct log_and : dsl::infix_op_list {
+    static constexpr auto op = dsl::op<ast::chained_comparison::op_t::logical_and>(LEXY_LIT("&&"));
+    using operand = dsl::atom;
+  };
+
+  using logical = dsl::groups<log_or, log_and>;
+
+  struct assignment : dsl::infix_op_single {
+    static constexpr auto op =
+        dsl::op<ast::assignment::op_t::value>(dsl::not_followed_by(dsl::equal_sign, dsl::equal_sign));
+    using operand = logical;
+  };
+
+  using operation = assignment;
+
+  static constexpr auto value = lexy::fold_inplace<std::unique_ptr<ast::chained_comparison>>(
+    [] { return std::make_unique<ast::chained_comparison>(); },
+    [](auto& node, ast::expr_ptr operand) { node->operands.emplace_back(LEXY_MOV(operand)); },
+    [](auto& node, ast::chained_comparison::op_t op) { node->ops.emplace_back(op); }
+  ) >> lexy::callback<ast::expr_ptr>(
+    lexy::forward<ast::expr_ptr>,
+    lexy::new_<ast::assignment, ast::expr_ptr>
   );
 };
 
@@ -715,7 +747,7 @@ auto main(int argc, char **argv) -> int try {
       return 1;
 
     auto statements = parse_result.value();
-    
+
     run_statements(env, statements);
   }
 } catch (double return_value) {
