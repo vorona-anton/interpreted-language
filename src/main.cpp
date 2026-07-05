@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 // GCC complains about a dangling pointer at lexy/action/validate.hpp:188:26,
@@ -32,22 +33,200 @@
 #include "fmt/core.h"
 
 namespace ast {
-constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
+// constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
 template <typename T> using ptr = std::shared_ptr<T>;
 using expr_ptr = ptr<struct expression>;
 using statement_ptr = ptr<struct statement>;
 using statement_vector = std::vector<statement_ptr>;
 
+template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
+
+using none = std::monostate;
+
+template <class T>
+constexpr std::string_view type_name_v = "unknown";  // comment: fallback for unhandled, no hard error
+
+template <>
+constexpr std::string_view type_name_v<none> = "none";
+
+template <>
+constexpr std::string_view type_name_v<double> = "double";
+
+template <>
+constexpr std::string_view type_name_v<bool> = "bool";
+
+template <>
+constexpr std::string_view type_name_v<ptr<struct function>> = "function";
+
+template <typename T>
+constexpr auto type_name_of = type_name_v<std::decay_t<T>>;
+
 struct value {
-  virtual ~value() noexcept = default;
+  std::variant<none, bool, double, ptr<function>> data;
+
+  template <typename T>
+  value(T t) : data{t} {}
+
+  operator bool() {
+    auto* ptr = std::get_if<bool>(&data);
+    if (not ptr) {
+      fmt::println("Value isn't a bool, default to false");
+    }
+    return ptr ? *ptr : false;
+  }
+
+  auto operator+(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs + rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot add {} and {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator-(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs - rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot subtract {} and {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator*(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs * rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot multiply {} and {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator/(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs / rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot subtract {} and {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator<(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs < rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} < {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator<=(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs <= rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} <= {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator>(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs < rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} < {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator>=(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](double lhs, double rhs) { return lhs >= rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} >= {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator==(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      []<typename T>(T lhs, T rhs) { return lhs == rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} == {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      },
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator!=(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      []<typename T>(T lhs, T rhs) { return lhs != rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} != {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator&&(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](bool lhs, bool rhs) { return lhs && rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} && {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator||(this const value& lhs, const value& rhs) -> value {
+    return std::visit<value>(overload{
+      [](bool lhs, bool rhs) { return lhs || rhs; },
+      []<typename T, typename U>(T&&, U&&) {
+        fmt::println("Cannot compare if {} && {}", type_name_of<T>, type_name_of<U>);
+        return none{};
+      }
+    }, lhs.data, rhs.data);
+  }
+
+  auto operator-() -> value {
+    return std::visit<value>(overload{
+      [](double v) { return -v; },
+      []<typename T>(T&&) {
+        fmt::println("Cannot negate {}", type_name_of<T>);
+        return none{};
+      }
+    }, data);
+  }
+
+  auto operator+() -> value {
+    return std::visit<value>(overload{
+      [](double v) { return v; },
+      []<typename T>(T&&) {
+        fmt::println("Cannot complement {}", type_name_of<T>);
+        return none{};
+      }
+    }, data);
+  }
+
+  auto operator!() -> value {
+    return std::visit<value>(overload{
+      [](bool v) { return !v; },
+      []<typename T>(T&&) {
+        fmt::println("Cannot invert {}", type_name_of<T>);
+        return none{};
+      }
+    }, data);
+  }
 };
 
-struct f64 : value {
-  explicit f64(double value) : value(value) {};
-  double value;
-};
-
-struct function : value {
+struct function {
   std::vector<ptr<struct variable>> args;
   statement_vector body;
 
@@ -57,7 +236,7 @@ struct function : value {
 };
 
 struct env {
-  std::unordered_map<std::string, ptr<value>> vars;
+  std::unordered_map<std::string, value> vars;
   env* parent = nullptr;
 
   static auto from_parent(env& parent) -> env {
@@ -66,14 +245,14 @@ struct env {
     return child;
   }
 
-  template <typename T> auto get(std::string const &identifier) -> ptr<T> {
+  auto get(std::string const &identifier) -> value* {
     if (vars.contains(identifier)) {
-      return std::dynamic_pointer_cast<T>(vars.at(identifier));
+      return &vars.at(identifier);
     }
 
     // If identifier exists, just somewhere down the parent tree
     if (has(identifier)) {
-      return parent->get<T>(identifier);
+      return parent->get(identifier);
     }
 
     return nullptr;
@@ -90,7 +269,7 @@ struct env {
 
 struct expression {
   virtual ~expression() = default;
-  virtual auto eval(env &) -> double = 0;
+  virtual auto eval(env &) -> value = 0;
 };
 
 struct statement {
@@ -103,52 +282,52 @@ void run_statements(env &env, statement_vector &statements);
 struct literal : expression {
   double value = 0;
   explicit literal(double val) : value{val} {}
-  auto eval(env &) -> double override { return value; }
+  auto eval(env &) -> ast::value override { return value; }
 };
 
 struct variable : expression {
   std::string identifier;
   explicit variable(std::string name) : identifier{std::move(name)} {}
-  auto eval(env &env) -> double override {
+  auto eval(env &env) -> value override {
     if (not env.has(identifier)) {
       fmt::println("Variable '{}' doesn't exist", identifier);
-      return nan;
+      return none{};
     }
 
-    auto var = env.get<f64>(identifier);
+    auto var = env.get(identifier);
 
     if (not var) {
       fmt::println("'{}' isn't a variable", identifier);
-      return nan;
+      return none{};
     }
 
-    return var->value;
+    return *var;
   }
 
-  auto declare(env& env, double value) -> double {
+  auto declare(env& env, const ast::value& value) -> ast::value {
     if (env.directly_has(identifier)) {
       fmt::println("Variable '{}' is already declared", identifier);
-      return nan;
+      return none{};
     };
 
-    env.vars.insert_or_assign(identifier, std::make_shared<f64>(value));
+    env.vars.insert_or_assign(identifier, value);
     return value;
   }
 
-  auto assign(env &env, double value) -> double {
+  auto assign(env &env, const value& value) -> ast::value {
     if (not env.has(identifier)) {
       fmt::println("Variable '{}' doesn't exist", identifier);
-      return nan;
+      return none{};
     }
 
-    auto var = env.get<f64>(identifier);
+    auto var = env.get(identifier);
 
     if (not var) {
       fmt::println("'{}' isn't a variable", identifier);
-      return nan;
+      return none{};
     }
 
-    return var->value = value;
+    return *var = value;
   }
 };
 
@@ -160,11 +339,11 @@ struct assignment : expression {
   explicit assignment(expr_ptr lhs, op_t, expr_ptr rhs)
       : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
 
-  auto eval(env &env) -> double override {
+  auto eval(env &env) -> value override {
     auto var = std::dynamic_pointer_cast<variable>(lhs);
     if (not var) {
       fmt::println("Assignment failed, lhs is not a variable name");
-      return nan;
+      return none{};
     }
 
     auto value = rhs->eval(env);
@@ -182,7 +361,7 @@ struct binop : expression {
   explicit binop(expr_ptr lhs, op_t op, expr_ptr rhs)
       : lhs{std::move(lhs)}, rhs{std::move(rhs)}, op{op} {}
 
-  auto eval(env &env) -> double override {
+  auto eval(env &env) -> value override {
     switch (op) {
       using enum op_t;
     case add:
@@ -211,22 +390,22 @@ struct chained_comparison : expression {
   explicit chained_comparison(expr_ptr lhs, op_t op, expr_ptr rhs)
     : ops{op}, operands{std::move(lhs), std::move(rhs)} {}
 
-  auto eval(env &env) -> double override {
+  auto eval(env &env) -> value override {
     using namespace std::views;
 
-    static constexpr auto equals_one = std::bind_front(std::equal_to{}, 1.0);
+    static constexpr auto equals_true = std::identity{};
     auto eval_expression = std::bind_back(&expression::eval, env);
 
     if (ops[0] == op_t::logical_and) {
-      return std::ranges::all_of(operands, equals_one, eval_expression);
+      return std::ranges::all_of(operands, equals_true, eval_expression);
     } else if (ops[0] == op_t::logical_or) {
-      return std::ranges::any_of(operands, equals_one, eval_expression);
+      return std::ranges::any_of(operands, equals_true, eval_expression);
     }
 
-    double prev = std::invoke(eval_expression, operands[0]);
+    value prev = std::invoke(eval_expression, operands[0]);
 
-    auto compare = [&prev](op_t op, double curr) -> bool {
-      bool result;
+    auto compare = [&prev](op_t op, const value& curr) -> bool {
+      value result = none{};
       switch (op) {
         case op_t::lt:  result = prev <  curr; break;
         case op_t::lte: result = prev <= curr; break;
@@ -257,12 +436,12 @@ struct prefix : expression {
   expr_ptr val;
   op_t op;
   explicit prefix(op_t op, expr_ptr val) : val{std::move(val)}, op{op} {}
-  auto eval(env &env) -> double override {
+  auto eval(env &env) -> value override {
     switch (op) {
       using enum op_t;
     case negate: return -val->eval(env);
-    case complement: return val->eval(env);
-    case invert: return val->eval(env) != 1.0;
+    case complement: return +val->eval(env);
+    case invert: return !val->eval(env);
     default:
       std::unreachable();
     }
@@ -278,11 +457,11 @@ struct postfix : expression {
   explicit postfix(expr_ptr callee, op_t, lexy::nullopt) : callee{std::move(callee)} {}
   explicit postfix(expr_ptr callee, op_t, std::vector<expr_ptr> args)
       : callee{std::move(callee)}, args{std::move(args)} {}
-  auto eval(env &env) -> double override {
+  auto eval(env &env) -> value override {
     auto var_ptr = std::dynamic_pointer_cast<variable>(callee);
     if (not var_ptr) {
       fmt::println("Call failed, lhs is not an identifier");
-      return nan;
+      return none{};
     }
 
     using namespace std::views;
@@ -291,18 +470,25 @@ struct postfix : expression {
         | transform([&](auto&& arg) { return arg->eval(env); })
         | std::ranges::to<std::vector>();
       fmt::print("Report:");
-      for (auto &&arg : evaluated_args)
-        fmt::print(" {}", arg);
+      for (auto &&arg : evaluated_args) {
+        std::string result = std::visit(ast::overload{
+          [](none) { return fmt::format("none"); },
+          [](bool v) { return fmt::format("{}", v); },
+          [](double v) { return fmt::format("{}", v); },
+          [](ptr<function> v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
+        }, arg.data);
+        fmt::print(" {}", result);
+      }
       fmt::print("\n");
-      return 0;
+      return none{};
     }
 
     if (not env.has(var_ptr->identifier)) {
       fmt::println("Call to '{}' failed, function doesn't exist", var_ptr->identifier);
-      return nan;
+      return none{};
     }
 
-    auto func = env.get<function>(var_ptr->identifier);
+    auto func = std::get<ptr<function>>(env.get(var_ptr->identifier)->data);
     auto &arg_vars = func->args;
     if (arg_vars.size() != args.size()) {
       fmt::println(
@@ -311,7 +497,7 @@ struct postfix : expression {
         arg_vars.size(),
         args.size()
       );
-      return nan;
+      return none{};
     }
 
     ast::env func_env = ast::env::from_parent(env);
@@ -322,8 +508,8 @@ struct postfix : expression {
 
     try {
       run_statements(func_env, func->body);
-      return nan;
-    } catch (double return_value) {
+      return none{};
+    } catch (value return_value) {
       return return_value;
     }
   }
@@ -387,7 +573,7 @@ struct if_statement : statement {
 
   auto exec(env &env) -> void override {
     ast::env new_env = ast::env::from_parent(env);
-    run_statements(new_env, condition->eval(env) == 1 ? if_branch : else_branch);
+    run_statements(new_env, condition->eval(env) ? if_branch : else_branch);
   }
 };
 
@@ -481,10 +667,12 @@ constexpr auto kw_fn = LEXY_KEYWORD("fn", id_rule);
 constexpr auto kw_return = LEXY_KEYWORD("return", id_rule);
 constexpr auto kw_if = LEXY_KEYWORD("if", id_rule);
 constexpr auto kw_else = LEXY_KEYWORD("else", id_rule);
+constexpr auto kw_true = LEXY_KEYWORD("true", id_rule);
+constexpr auto kw_false = LEXY_KEYWORD("false", id_rule);
 
 struct identifier {
   static constexpr auto rule =
-      id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else);
+      id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else, kw_true, kw_false);
   static constexpr auto value = lexy::as_string<std::string>;
 };
 
