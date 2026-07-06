@@ -38,6 +38,7 @@ template <typename T> using ptr = std::shared_ptr<T>;
 using expr_ptr = ptr<struct expression>;
 using statement_ptr = ptr<struct statement>;
 using statement_vector = std::vector<statement_ptr>;
+using func_ptr = ptr<struct function>;
 
 template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
 
@@ -56,13 +57,13 @@ template <>
 constexpr std::string_view type_name_v<bool> = "bool";
 
 template <>
-constexpr std::string_view type_name_v<ptr<struct function>> = "function";
+constexpr std::string_view type_name_v<func_ptr> = "function";
 
 template <typename T>
 constexpr auto type_name_of = type_name_v<std::decay_t<T>>;
 
 struct value {
-  std::variant<none, bool, double, ptr<function>> data;
+  std::variant<none, bool, double, func_ptr> data;
 
   template <typename T>
   value(T t) : data{t} {}
@@ -226,15 +227,6 @@ struct value {
   }
 };
 
-struct function {
-  std::vector<ptr<struct variable>> args;
-  statement_vector body;
-
-  function() = default;
-  explicit function(std::vector<ptr<struct variable>> args, statement_vector body)
-      : args{std::move(args)}, body{std::move(body)} {}
-};
-
 struct env {
   std::unordered_map<std::string, value> vars;
   env* parent = nullptr;
@@ -328,6 +320,65 @@ struct variable : expression {
     }
 
     return *var = value;
+  }
+};
+
+struct function {
+  virtual ~function() = default;
+  virtual auto eval(env &env, std::vector<value> arguments) -> value = 0;
+};
+
+struct user_function : function {
+  std::vector<ptr<struct variable>> parameters;
+  statement_vector body;
+
+  user_function() = default;
+  explicit user_function(std::vector<ptr<struct variable>> parameters, statement_vector body)
+    : parameters{std::move(parameters)}, body{std::move(body)} {}
+  
+  auto eval(env &env, std::vector<value> arguments) -> value override {
+    if (parameters.size() != parameters.size()) {
+      fmt::println(
+        "Call to function at {} failed, expected {} args, got {}",
+        fmt::ptr(this),
+        parameters.size(),
+        arguments.size()
+      );
+      return none{};
+    }
+
+    ast::env func_env = ast::env::from_parent(env);
+
+    for (auto &&[var, value] : std::views::zip(parameters, arguments)) {
+      var->declare(func_env, value);
+    }
+
+    try {
+      run_statements(func_env, body);
+      return none{};
+    } catch (value return_value) {
+      return return_value;
+    }
+  }
+};
+
+struct builtin_function : function {
+  struct {
+    std::size_t min = 0;
+    std::optional<std::size_t> max = 0; // Nullopt means that there's no limit
+  } argument_count;
+  using FunctionType = auto(*)(env &env, std::vector<value> arguments) -> value;
+  FunctionType function_body;
+
+  explicit builtin_function(decltype(argument_count) argument_count, FunctionType function_body)
+    : argument_count{argument_count}, function_body{function_body} {}
+
+  static auto make_shared(decltype(argument_count) argument_count, FunctionType function_body) -> func_ptr {
+    return std::make_shared<builtin_function>(argument_count, function_body);
+  }
+
+  auto eval(env &env, std::vector<value> arguments) -> value override {
+    return function_body(env, std::move(arguments));
   }
 };
 
@@ -458,68 +509,27 @@ struct postfix : expression {
   explicit postfix(expr_ptr callee, op_t, std::vector<expr_ptr> args)
       : callee{std::move(callee)}, args{std::move(args)} {}
   auto eval(env &env) -> value override {
-    auto var_ptr = std::dynamic_pointer_cast<variable>(callee);
-    if (not var_ptr) {
-      fmt::println("Call failed, lhs is not an identifier");
+    auto lhs_val = callee->eval(env);
+    if (not std::holds_alternative<func_ptr>(lhs_val.data)) {
+      fmt::println("Call failed, lhs is not a function");
       return none{};
     }
 
-    using namespace std::views;
-    if (var_ptr->identifier == "report") {
-      auto evaluated_args = args
-        | transform([&](auto&& arg) { return arg->eval(env); })
-        | std::ranges::to<std::vector>();
-      fmt::print("Report:");
-      for (auto &&arg : evaluated_args) {
-        std::string result = std::visit(ast::overload{
-          [](none) { return fmt::format("none"); },
-          [](bool v) { return fmt::format("{}", v); },
-          [](double v) { return fmt::format("{}", v); },
-          [](ptr<function> v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
-        }, arg.data);
-        fmt::print(" {}", result);
-      }
-      fmt::print("\n");
-      return none{};
-    }
+    using std::views::transform;
 
-    if (not env.has(var_ptr->identifier)) {
-      fmt::println("Call to '{}' failed, function doesn't exist", var_ptr->identifier);
-      return none{};
-    }
-
-    auto func = std::get<ptr<function>>(env.get(var_ptr->identifier)->data);
-    auto &arg_vars = func->args;
-    if (arg_vars.size() != args.size()) {
-      fmt::println(
-        "Call to '{}' failed, expected {} args, got {}",
-        var_ptr->identifier,
-        arg_vars.size(),
-        args.size()
-      );
-      return none{};
-    }
-
-    ast::env func_env = ast::env::from_parent(env);
-
-    for (auto &&[var, expr] : zip(arg_vars, args)) {
-      var->declare(func_env, expr->eval(env));
-    }
-
-    try {
-      run_statements(func_env, func->body);
-      return none{};
-    } catch (value return_value) {
-      return return_value;
-    }
+    auto func = std::get<func_ptr>(lhs_val.data);
+    auto evaluated_args = args
+      | transform(std::bind_back(&expression::eval, env))
+      | std::ranges::to<std::vector>();
+    return func->eval(env, std::move(evaluated_args));
   }
 };
 
 struct func_decl : statement {
   std::string identifier;
-  function body;
-  explicit func_decl(std::string identifier, function body)
-      : identifier{std::move(identifier)}, body{std::move(body)} {}
+  func_ptr body;
+  explicit func_decl(std::string identifier, user_function body)
+      : identifier{std::move(identifier)}, body{std::make_unique<user_function>(std::move(body))} {}
 
   auto exec(env &env) -> void override {
     if (env.directly_has(identifier)) {
@@ -527,7 +537,7 @@ struct func_decl : statement {
       return;
     };
 
-    env.vars.insert_or_assign(identifier, std::make_shared<function>(body));
+    env.vars.insert_or_assign(identifier, body);
   }
 };
 
@@ -822,7 +832,7 @@ struct scope_declaration {
 
 struct function_body {
   static constexpr auto rule = dsl::p<arg_list> + dsl::p<scope_declaration>;
-  static constexpr auto value = lexy::construct<ast::function>;
+  static constexpr auto value = lexy::construct<ast::user_function>;
 };
 
 struct function_declaration {
