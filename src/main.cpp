@@ -918,6 +918,25 @@ auto main(int argc, char **argv) -> int try {
   std::string raw_input;
   ast::env env{};
 
+  ast::variable{"report"}.declare(env, ast::builtin_function::make_shared(
+  {.max = std::nullopt},
+  [](ast::env&, std::vector<ast::value> args) -> ast::value {
+    fmt::print("Report:");
+    for (auto&& arg : args) {
+      std::string result = std::visit(ast::overload{
+        [](ast::none) { return fmt::format("none"); },
+        [](bool v) { return fmt::format("{}", v); },
+        [](double v) { return fmt::format("{}", v); },
+        [](ast::func_ptr v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
+      }, arg.data);
+      fmt::print(" {}", result);
+    }
+    fmt::println("");
+    
+    return ast::none{};
+  }
+));
+
   if (argc == 2) {
     ast::statement_vector statements;
     int failure = parse_file(argv[1], statements);
