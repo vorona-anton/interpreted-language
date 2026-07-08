@@ -377,7 +377,28 @@ struct builtin_function : function {
     return std::make_shared<builtin_function>(argument_count, function_body);
   }
 
+  auto is_variadic() -> bool {
+    if (not argument_count.max.has_value()) { return true; }
+    return argument_count.max.value() != argument_count.min;
+  }
+
   auto eval(env &env, std::vector<value> arguments) -> value override {
+
+    std::optional<std::string> error;
+
+    if (not is_variadic() and arguments.size() != argument_count.min) {
+        error = fmt::format("expected {} args", argument_count.min);
+    } else if (is_variadic() and arguments.size() < argument_count.min) {
+        error = fmt::format("expected at least {} args", argument_count.min);
+    } else if (argument_count.max and arguments.size() > *argument_count.max) {
+        error = fmt::format("expected at most {} args", *argument_count.max);
+    }
+
+    if (error) {
+        fmt::println("Call to function at {} failed, {}, got {}", fmt::ptr(this), *error, arguments.size());
+        return none{};
+    }
+
     return function_body(env, std::move(arguments));
   }
 };
@@ -919,23 +940,23 @@ auto main(int argc, char **argv) -> int try {
   ast::env env{};
 
   ast::variable{"report"}.declare(env, ast::builtin_function::make_shared(
-  {.max = std::nullopt},
-  [](ast::env&, std::vector<ast::value> args) -> ast::value {
-    fmt::print("Report:");
-    for (auto&& arg : args) {
-      std::string result = std::visit(ast::overload{
-        [](ast::none) { return fmt::format("none"); },
-        [](bool v) { return fmt::format("{}", v); },
-        [](double v) { return fmt::format("{}", v); },
-        [](ast::func_ptr v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
-      }, arg.data);
-      fmt::print(" {}", result);
+    {.max = std::nullopt},
+    [](ast::env&, std::vector<ast::value> args) -> ast::value {
+      fmt::print("Report:");
+      for (auto&& arg : args) {
+        std::string result = std::visit(ast::overload{
+          [](ast::none) { return fmt::format("none"); },
+          [](bool v) { return fmt::format("{}", v); },
+          [](double v) { return fmt::format("{}", v); },
+          [](ast::func_ptr v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
+        }, arg.data);
+        fmt::print(" {}", result);
+      }
+      fmt::println("");
+      
+      return ast::none{};
     }
-    fmt::println("");
-    
-    return ast::none{};
-  }
-));
+  ));
 
   if (argc == 2) {
     ast::statement_vector statements;
