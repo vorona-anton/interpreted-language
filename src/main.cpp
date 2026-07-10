@@ -138,7 +138,7 @@ struct value {
 
   auto operator>(this const value& lhs, const value& rhs) -> value {
     return std::visit<value>(overload{
-      [](double lhs, double rhs) { return lhs < rhs; },
+      [](double lhs, double rhs) { return lhs > rhs; },
       []<typename T, typename U>(T&&, U&&) {
         fmt::println("Cannot compare if {} < {}", type_name_of<T>, type_name_of<U>);
         return none{};
