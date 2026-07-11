@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <functional>
 #include <iostream>
-#include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <unordered_map>
@@ -266,10 +266,10 @@ struct expression {
 
 struct statement {
   virtual ~statement() = default;
-  virtual auto exec(env &) -> void = 0;
+  virtual auto exec(env &) -> std::optional<value> = 0;
 };
 
-void run_statements(env &env, statement_vector &statements);
+auto run_statements(env &env, statement_vector &statements) -> std::optional<value>;
 
 struct literal : expression {
   double value = 0;
@@ -353,12 +353,7 @@ struct user_function : function {
       var->declare(func_env, value);
     }
 
-    try {
-      run_statements(func_env, body);
-      return none{};
-    } catch (value return_value) {
-      return return_value;
-    }
+    return run_statements(func_env, body).value_or(none{});
   }
 };
 
@@ -552,13 +547,14 @@ struct func_decl : statement {
   explicit func_decl(std::string identifier, user_function body)
       : identifier{std::move(identifier)}, body{std::make_unique<user_function>(std::move(body))} {}
 
-  auto exec(env &env) -> void override {
+  auto exec(env &env) -> std::optional<value> override {
     if (env.directly_has(identifier)) {
       fmt::println("'{}' is already declared", identifier);
-      return;
+      return std::nullopt;
     };
 
     env.vars.insert_or_assign(identifier, body);
+    return std::nullopt;
   }
 };
 
@@ -568,30 +564,35 @@ struct variable_decl : statement {
   explicit variable_decl(ptr<ast::variable> variable, expr_ptr initializer)
     : variable{std::move(variable)}, initializer{std::move(initializer)} {}
 
-  auto exec(env &env) -> void override {
+  auto exec(env &env) -> std::optional<value> override {
     variable->declare(env, initializer->eval(env));
+    return std::nullopt;
   }
 };
 
 struct return_statement : statement {
   expr_ptr expr;
   explicit return_statement(expr_ptr expr) : expr{std::move(expr)} {}
-  auto exec(env &env) -> void override {
-    throw expr->eval(env);
+  auto exec(env &env) -> std::optional<value> override {
+    return expr->eval(env);
   }
 };
 
 struct expression_statement : statement {
   expr_ptr expr;
   explicit expression_statement(expr_ptr expr) : expr{std::move(expr)} {}
-  auto exec(env &env) -> void override {
+  auto exec(env &env) -> std::optional<value> override {
     expr->eval(env);
+    return std::nullopt;
   }
 };
 
 struct empty_statement : statement {
   explicit empty_statement() = default;
-  auto exec(env &env) -> void override { std::ignore = env; }
+  auto exec(env &env) -> std::optional<value> override {
+    std::ignore = env;
+    return std::nullopt;
+  }
 };
 
 struct if_statement : statement {
@@ -602,16 +603,20 @@ struct if_statement : statement {
   explicit if_statement(expr_ptr condition, statement_vector if_branch, statement_vector else_branch)
       : condition{std::move(condition)}, if_branch{std::move(if_branch)}, else_branch{std::move(else_branch)} {}
 
-  auto exec(env &env) -> void override {
+  auto exec(env &env) -> std::optional<value> override {
     ast::env new_env = ast::env::from_parent(env);
-    run_statements(new_env, condition->eval(env) ? if_branch : else_branch);
+    return run_statements(new_env, condition->eval(env) ? if_branch : else_branch);
   }
 };
 
-void run_statements(env &env, statement_vector &statements) {
+auto run_statements(env &env, statement_vector &statements) -> std::optional<value> {
   for (auto &&statement : statements) {
-    statement->exec(env);
+    if (auto result = statement->exec(env)) {
+      return result;
+    }
   }
+
+  return std::nullopt;
 }
 } // namespace ast
 
