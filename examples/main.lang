@@ -58,8 +58,8 @@ fn fibonacci(n) {
 fn test(b) {
     // Function definitions currently don't capture variables, so after functions get returned, b gets destroyed
     // and when test1 or test2 is called it grabs b from the environment at the call site
-    fn test1() { report(1, b); }
-    fn test2() { report(2, b); }
+    fn test1() { report(1, b); return 1; }
+    fn test2() { report(2, b); return 2; }
     if b {
         return test1;
     } else {
@@ -77,7 +77,8 @@ report(5 / (3 - 2)); // 5
 report(identity(5)); // Should print error and return none
 report(sign(-2), sign(0), sign(10), sign(-inf), sign(nan)); // -1 0 1 -1 nan
 
-let v = test(1 == 1);
-v(); // 1 none, because b isn't in the scope
+let v = test(true);
+report(v()); // v reports 1 none and this line reports 1. None is here because b isn't in the scope when v gets called
 let b = 5;
-v(); // 1 5
+report(v()); // v reports 1 5 and this line reports 1.
+report(test(false)()); // Report: 2 5 + Report: 2

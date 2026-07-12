@@ -271,9 +271,15 @@ struct statement {
 
 auto run_statements(env &env, statement_vector &statements) -> std::optional<value>;
 
-struct literal : expression {
+struct real_literal : expression {
   double value = 0;
-  explicit literal(double val) : value{val} {}
+  explicit real_literal(double val) : value{val} {}
+  auto eval(env &) -> ast::value override { return value; }
+};
+
+struct bool_literal : expression {
+  bool value = false;
+  explicit bool_literal(bool val) : value{val} {}
   auto eval(env &) -> ast::value override { return value; }
 };
 
@@ -692,7 +698,7 @@ struct whitespace {
 struct number {
   static constexpr auto rule = dsl::peek(dsl::digit<>) >> extra::real<double>;
   static constexpr auto value =
-      lexy::new_<ast::literal, ast::ptr<ast::literal>>;
+      lexy::new_<ast::real_literal, ast::ptr<ast::real_literal>>;
 };
 
 constexpr auto id_rule = dsl::identifier(dsl::unicode::xid_start_underscore,
@@ -705,6 +711,21 @@ constexpr auto kw_if = LEXY_KEYWORD("if", id_rule);
 constexpr auto kw_else = LEXY_KEYWORD("else", id_rule);
 constexpr auto kw_true = LEXY_KEYWORD("true", id_rule);
 constexpr auto kw_false = LEXY_KEYWORD("false", id_rule);
+
+struct boolean {
+  struct true_ : lexy::transparent_production {
+    static constexpr auto rule = kw_true;
+    static constexpr auto value = lexy::constant(true);
+  };
+
+  struct false_ : lexy::transparent_production {
+    static constexpr auto rule = kw_false;
+    static constexpr auto value = lexy::constant(false);
+  };
+
+  static constexpr auto rule = dsl::p<true_> | dsl::p<false_>;
+  static constexpr auto value = lexy::new_<ast::bool_literal, ast::ptr<ast::bool_literal>>;
+};
 
 struct identifier {
   static constexpr auto rule =
@@ -723,7 +744,7 @@ struct var {
 // So `a < b == c < d` which should get parsed as `(a < b) == (c < d)` emits and error message
 // Which is not desired, so to avoid this, there should only be 1 group per expression production
 struct relational : lexy::expression_production {
-  static constexpr auto atom = dsl::parenthesized(dsl::recurse<struct expr>) | dsl::p<number> | dsl::p<var>;
+  static constexpr auto atom = dsl::parenthesized(dsl::recurse<struct expr>) | dsl::p<number> | dsl::p<boolean> | dsl::p<var>;
 
   struct call : dsl::postfix_op {
     static constexpr auto op = dsl::op<ast::postfix::op_t::value>(
