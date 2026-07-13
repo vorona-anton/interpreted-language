@@ -68,6 +68,7 @@ fn test(b) {
 }
 
 // report is a built-in function to print to stdout
+report(none, 1.23, true, fibonacci); // none, 1.23, true, address of fibonacci
 report(fibonacci(5)); // 5
 
 report(fibonacci == 0); // Different types, so triggers and error and defaults to false
