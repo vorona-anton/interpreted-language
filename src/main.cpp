@@ -526,14 +526,12 @@ struct prefix : expression {
   }
 };
 
-struct postfix : expression {
+struct call : expression {
   enum struct op_t { value };
 
   expr_ptr callee;
   std::vector<expr_ptr> args;
-  explicit postfix(expr_ptr callee, op_t) : callee{std::move(callee)} {}
-  explicit postfix(expr_ptr callee, op_t, lexy::nullopt) : callee{std::move(callee)} {}
-  explicit postfix(expr_ptr callee, op_t, std::vector<expr_ptr> args)
+  explicit call(expr_ptr callee, op_t, std::vector<expr_ptr> args)
       : callee{std::move(callee)}, args{std::move(args)} {}
   auto eval(env &env) -> value override {
     auto lhs_val = callee->eval(env);
@@ -760,8 +758,13 @@ struct relational : lexy::expression_production {
     | dsl::p<var>;
 
   struct call : dsl::postfix_op {
-    static constexpr auto op = dsl::op<ast::postfix::op_t::value>(
-        dsl::parenthesized.opt(dsl::recurse<struct expr_list>));
+    struct arg_list {
+      static constexpr auto rule = dsl::terminator(dsl::lit_c<')'>).opt_list(dsl::recurse<expr>, dsl::sep(dsl::comma));
+      static constexpr auto value = lexy::as_list<std::vector<ast::expr_ptr>>;
+    };
+
+    static constexpr auto op = dsl::op<ast::call::op_t::value>(
+        dsl::lit_c<'('> >> dsl::p<arg_list>);
     using operand = dsl::atom;
   };
 
@@ -810,7 +813,7 @@ struct relational : lexy::expression_production {
     lexy::new_<ast::chained_comparison, ast::expr_ptr>,
     lexy::new_<ast::binop, ast::expr_ptr>,
     lexy::new_<ast::prefix, ast::expr_ptr>,
-    lexy::new_<ast::postfix, ast::expr_ptr>
+    lexy::new_<ast::call, ast::expr_ptr>
   );
 };
 
@@ -871,11 +874,6 @@ struct expr : lexy::expression_production {
     lexy::forward<ast::expr_ptr>,
     lexy::new_<ast::assignment, ast::expr_ptr>
   );
-};
-
-struct expr_list {
-  static constexpr auto rule = dsl::list(dsl::p<expr>, dsl::sep(dsl::comma));
-  static constexpr auto value = lexy::as_list<std::vector<ast::expr_ptr>>;
 };
 
 struct arg_list {
