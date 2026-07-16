@@ -1,3 +1,10 @@
+#include "lexy/callback/string.hpp"
+#include "lexy/code_point.hpp"
+#include "lexy/dsl/delimited.hpp"
+#include "lexy/dsl/integer.hpp"
+#include "lexy/dsl/symbol.hpp"
+#include "lexy/dsl/unicode.hpp"
+#include "lexy/encoding.hpp"
 #include <algorithm>
 #include <functional>
 #include <iostream>
@@ -702,6 +709,29 @@ struct number {
   static constexpr auto rule = dsl::peek(dsl::digit<>) >> extra::real<double>;
   static constexpr auto value =
       lexy::new_<ast::real_literal, ast::ptr<ast::real_literal>>;
+};
+
+struct string {
+  static constexpr auto escaped_characters = lexy::symbol_table<char>
+    .map<'\\'>('\\')
+    .map<'"'>('"')
+    .map<'\''>('\'')
+    .map<'n'>('\n')
+    .map<'r'>('\r')
+    .map<'t'>('\t')
+    .map<'b'>('\b')
+    .map<'f'>('\f')
+    .map<'v'>('\v');
+
+  struct unicode_char {
+    static constexpr auto rule = dsl::lit_c<'u'> >> dsl::code_unit_id<lexy::utf8_char_encoding, 4>;
+    static constexpr auto value = lexy::construct<lexy::code_point>;
+  };
+
+  static constexpr auto escape_rule = dsl::backslash_escape.symbol<escaped_characters>().rule(dsl::p<unicode_char>);
+
+  static constexpr auto rule = dsl::quoted.limit(dsl::ascii::newline)(-dsl::unicode::control, escape_rule);
+  static constexpr auto value = lexy::as_string<std::string>;
 };
 
 constexpr auto id_rule = dsl::identifier(dsl::unicode::xid_start_underscore,
