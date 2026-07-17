@@ -1,10 +1,3 @@
-#include "lexy/callback/string.hpp"
-#include "lexy/code_point.hpp"
-#include "lexy/dsl/delimited.hpp"
-#include "lexy/dsl/integer.hpp"
-#include "lexy/dsl/symbol.hpp"
-#include "lexy/dsl/unicode.hpp"
-#include "lexy/encoding.hpp"
 #include <algorithm>
 #include <functional>
 #include <iostream>
@@ -70,7 +63,7 @@ template <typename T>
 constexpr auto type_name_of = type_name_v<std::decay_t<T>>;
 
 struct value {
-  std::variant<none, bool, double, func_ptr> data;
+  std::variant<none, bool, double, std::string, func_ptr> data;
 
   template <typename T>
   value(T t) : data{t} {}
@@ -86,6 +79,7 @@ struct value {
   auto operator+(this const value& lhs, const value& rhs) -> value {
     return std::visit<value>(overload{
       [](double lhs, double rhs) { return lhs + rhs; },
+      [](std::string const& lhs, std::string const& rhs) { return lhs + rhs; },
       []<typename T, typename U>(T&&, U&&) {
         fmt::println("Cannot add {} and {}", type_name_of<T>, type_name_of<U>);
         return none{};
@@ -292,6 +286,12 @@ struct real_literal : expression {
 struct bool_literal : expression {
   bool value = false;
   explicit bool_literal(bool val) : value{val} {}
+  auto eval(env &) -> ast::value override { return value; }
+};
+
+struct string_literal : expression {
+  std::string value{};
+  explicit string_literal(std::string val) : value{std::move(val)} {}
   auto eval(env &) -> ast::value override { return value; }
 };
 
@@ -731,7 +731,7 @@ struct string {
   static constexpr auto escape_rule = dsl::backslash_escape.symbol<escaped_characters>().rule(dsl::p<unicode_char>);
 
   static constexpr auto rule = dsl::quoted.limit(dsl::ascii::newline)(-dsl::unicode::control, escape_rule);
-  static constexpr auto value = lexy::as_string<std::string>;
+  static constexpr auto value = lexy::as_string<std::string, lexy::utf8_char_encoding> >> lexy::new_<ast::string_literal, ast::ptr<ast::string_literal>>;
 };
 
 constexpr auto id_rule = dsl::identifier(dsl::unicode::xid_start_underscore,
@@ -784,7 +784,7 @@ struct var {
 // Which is not desired, so to avoid this, there should only be 1 group per expression production
 struct relational : lexy::expression_production {
   static constexpr auto atom = dsl::parenthesized(dsl::recurse<struct expr>)
-    | dsl::p<number>| dsl::p<boolean> | dsl::p<none>
+    | dsl::p<number>| dsl::p<boolean> | dsl::p<none> | dsl::p<string>
     | dsl::p<var>;
 
   struct call : dsl::postfix_op {
@@ -1013,9 +1013,8 @@ auto main(int argc, char **argv) -> int try {
       for (auto&& arg : args) {
         std::string result = std::visit(ast::overload{
           [](ast::none) { return fmt::format("none"); },
-          [](bool v) { return fmt::format("{}", v); },
-          [](double v) { return fmt::format("{}", v); },
           [](ast::func_ptr v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
+          [](auto&& v) { return fmt::format("{}", v); },
         }, arg.data);
         fmt::print(" {}", result);
       }
