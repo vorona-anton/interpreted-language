@@ -723,12 +723,22 @@ struct string {
     .map<'f'>('\f')
     .map<'v'>('\v');
 
-  struct unicode_char {
-    static constexpr auto rule = dsl::lit_c<'u'> >> dsl::code_unit_id<lexy::utf8_char_encoding, 4>;
+  struct ucn_4 {
+    static constexpr auto rule = dsl::lit_c<'u'> >> dsl::code_unit_id<lexy::utf16_encoding, 4>;
     static constexpr auto value = lexy::construct<lexy::code_point>;
   };
 
-  static constexpr auto escape_rule = dsl::backslash_escape.symbol<escaped_characters>().rule(dsl::p<unicode_char>);
+  struct ucn_8 {
+    static constexpr auto rule = dsl::lit_c<'U'> >> dsl::code_unit_id<lexy::utf32_encoding, 8>;
+    static constexpr auto value = lexy::construct<lexy::code_point>;
+  };
+
+  struct ucn_delimited {
+    static constexpr auto rule = LEXY_LIT("u{") >> dsl::terminator(dsl::lit_c<'}'>)(dsl::integer<lexy::code_point>(dsl::digits<dsl::hex>));
+    static constexpr auto value = lexy::construct<lexy::code_point>;
+  };
+
+  static constexpr auto escape_rule = dsl::backslash_escape.symbol<escaped_characters>().rule(dsl::p<ucn_delimited>).rule(dsl::p<ucn_4>).rule(dsl::p<ucn_8>);
 
   static constexpr auto rule = dsl::quoted.limit(dsl::ascii::newline)(-dsl::unicode::control, escape_rule);
   static constexpr auto value = lexy::as_string<std::string, lexy::utf8_char_encoding> >> lexy::new_<ast::string_literal, ast::ptr<ast::string_literal>>;
@@ -1056,4 +1066,7 @@ auto main(int argc, char **argv) -> int try {
   }
 } catch (double return_value) {
   return static_cast<int>(return_value);
+} catch (std::exception const& e) {
+  fmt::println("{}", e.what());
+  return 1;
 }
