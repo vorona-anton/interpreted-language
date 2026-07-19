@@ -57,6 +57,9 @@ template <>
 constexpr std::string_view type_name_v<bool> = "bool";
 
 template <>
+constexpr std::string_view type_name_v<std::string> = "string";
+
+template <>
 constexpr std::string_view type_name_v<func_ptr> = "function";
 
 template <typename T>
