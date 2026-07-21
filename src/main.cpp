@@ -1019,17 +1019,20 @@ auto main(int argc, char **argv) -> int try {
   std::string raw_input;
   ast::env env{};
 
-  ast::variable{"report"}.declare(env, ast::builtin_function::make_shared(
+  ast::variable{"print"}.declare(env, ast::builtin_function::make_shared(
     {.max = std::nullopt},
     [](ast::env&, std::vector<ast::value> args) -> ast::value {
-      fmt::print("Report:");
+      bool is_first = true;
       for (auto&& arg : args) {
         std::string result = std::visit(ast::overload{
           [](ast::none) { return fmt::format("none"); },
           [](ast::func_ptr v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
           [](auto&& v) { return fmt::format("{}", v); },
         }, arg.data);
-        fmt::print(" {}", result);
+
+        if (not is_first) { fmt::print(" "); }
+        fmt::print("{}", result);
+        is_first = false;
       }
       fmt::println("");
       

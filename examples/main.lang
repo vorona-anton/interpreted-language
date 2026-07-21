@@ -58,8 +58,8 @@ fn fibonacci(n) {
 fn test(b) {
     // Function definitions currently don't capture variables, so after functions get returned, b gets destroyed
     // and when test1 or test2 is called it grabs b from the environment at the call site
-    fn test1() { report(1, b); return 1; }
-    fn test2() { report(2, b); return 2; }
+    fn test1() { print(1, b); return 1; }
+    fn test2() { print(2, b); return 2; }
     if b {
         return test1;
     } else {
@@ -67,19 +67,20 @@ fn test(b) {
     }
 }
 
-// report is a built-in function to print to stdout
-report(none, 1.23, true, fibonacci); // none, 1.23, true, address of fibonacci
-report(fibonacci(5)); // 5
+// print is a built-in function to print to stdout
+print("Hello world!");
+print(none, 1.23, true, fibonacci); // none, 1.23, true, address of fibonacci
+print(fibonacci(5)); // 5
 
-report(fibonacci == 0); // Different types, so triggers and error and defaults to false
-report(is_clamped(x, 0, 10)); // true
-report(square(x)); // Roughly 27.04
-report(5 / (3 - 2)); // 5
-report(identity(5)); // Should print error and return none
-report(sign(-2), sign(0), sign(10), sign(-inf), sign(nan)); // -1 0 1 -1 nan
+print(fibonacci == 0); // Different types, so triggers and error and defaults to false
+print(is_clamped(x, 0, 10)); // true
+print(square(x)); // Roughly 27.04
+print(5 / (3 - 2)); // 5
+print(identity(5)); // Should print error and return none
+print(sign(-2), sign(0), sign(10), sign(-inf), sign(nan)); // -1 0 1 -1 nan
 
 let v = test(true);
-report(v()); // v reports 1 none and this line reports 1. None is here because b isn't in the scope when v gets called
+print(v()); // v reports 1 none and this line reports 1. None is here because b isn't in the scope when v gets called
 let b = 5;
-report(v()); // v reports 1 5 and this line reports 1.
-report(test(false)()); // Report: 2 5 + Report: 2
+print(v()); // v reports 1 5 and this line reports 1.
+print(test(false)()); // 2 5 and 2

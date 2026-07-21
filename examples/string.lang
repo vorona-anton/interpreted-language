@@ -1,11 +1,11 @@
-report("Hello world!");
+print("Hello world!");
 
 let str1 = "Hello ";
 let str2 = "concatination!";
-report(str1 + str2);
+print(str1 + str2);
 
-report(str1 + 5); // Error
+print(str1 + 5); // Error
 
-report("Hello\nNew line!");
+print("Hello\nNew line!");
 
-report("Hello \u0168\U00010513\u{EF}code");
+print("Hello \u0168\U00010513\u{EF}code");
