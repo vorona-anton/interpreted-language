@@ -628,6 +628,21 @@ struct if_statement : statement {
   }
 };
 
+struct while_statement : statement {
+  expr_ptr sentinel;
+  statement_vector body;
+
+  explicit while_statement(expr_ptr sentinel, statement_vector body)
+      : sentinel(std::move(sentinel)), body(std::move(body)) {}
+
+  auto exec(env &env) -> std::optional<value> override {
+    while (sentinel->eval(env)) {
+      ast::env new_env = ast::env::from_parent(env);
+      return run_statements(new_env, body);
+    }
+  }
+};
+
 auto run_statements(env &env, statement_vector &statements) -> std::optional<value> {
   for (auto &&statement : statements) {
     if (auto result = statement->exec(env)) {
