@@ -638,8 +638,11 @@ struct while_statement : statement {
   auto exec(env &env) -> std::optional<value> override {
     while (sentinel->eval(env)) {
       ast::env new_env = ast::env::from_parent(env);
-      return run_statements(new_env, body);
+      if (auto result = run_statements(new_env, body)) {
+        return result;
     }
+    }
+    return std::nullopt;
   }
 };
 
