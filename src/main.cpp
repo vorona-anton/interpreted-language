@@ -640,7 +640,7 @@ struct while_statement : statement {
       ast::env new_env = ast::env::from_parent(env);
       if (auto result = run_statements(new_env, body)) {
         return result;
-    }
+      }
     }
     return std::nullopt;
   }
@@ -771,6 +771,7 @@ constexpr auto id_rule = dsl::identifier(dsl::unicode::xid_start_underscore,
 constexpr auto kw_let = LEXY_KEYWORD("let", id_rule);
 constexpr auto kw_fn = LEXY_KEYWORD("fn", id_rule);
 constexpr auto kw_return = LEXY_KEYWORD("return", id_rule);
+constexpr auto kw_while = LEXY_KEYWORD("while", id_rule);
 constexpr auto kw_if = LEXY_KEYWORD("if", id_rule);
 constexpr auto kw_else = LEXY_KEYWORD("else", id_rule);
 constexpr auto kw_true = LEXY_KEYWORD("true", id_rule);
@@ -799,7 +800,7 @@ struct none {
 
 struct identifier {
   static constexpr auto rule =
-      id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else, kw_true, kw_false);
+      id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else, kw_true, kw_false, kw_while);
   static constexpr auto value = lexy::as_string<std::string>;
 };
 
@@ -1001,9 +1002,14 @@ struct if_statement {
   static constexpr auto value = lexy::new_<ast::if_statement, ast::statement_ptr>;
 };
 
+struct while_statement {
+  static constexpr auto rule = kw_while >> dsl::p<expr> + dsl::p<scope_declaration>;
+  static constexpr auto value = lexy::new_<ast::while_statement, ast::statement_ptr>; 
+};
+
 struct statement {
   static constexpr auto rule = dsl::p<variable_declaration> | dsl::p<function_declaration> | dsl::p<return_statement>
-    | dsl::p<if_statement> | dsl::p<empty_statement>
+    | dsl::p<if_statement> | dsl::p<while_statement> | dsl::p<empty_statement>
     | dsl::else_ >> dsl::p<expression_statement>;
   static constexpr auto value = lexy::forward<ast::statement_ptr>;
 };
