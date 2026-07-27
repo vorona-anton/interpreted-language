@@ -42,7 +42,8 @@ using func_ptr = ptr<struct function>;
 
 template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
 
-using none = std::monostate;
+struct none { auto operator==(none const&) const -> bool = default; };
+struct continue_tag { auto operator==(continue_tag const&) const -> bool = default; };
 
 template <class T>
 constexpr std::string_view type_name_v = "unknown";  // comment: fallback for unhandled, no hard error
@@ -66,7 +67,9 @@ template <typename T>
 constexpr auto type_name_of = type_name_v<std::decay_t<T>>;
 
 struct value {
-  std::variant<none, bool, double, std::string, func_ptr> data;
+  // continue statements "return" a continue_tag that gets caught by inner-most loop
+  // but this tag should never be leaked as an actual return value assignable to a variable
+  std::variant<none, continue_tag, bool, double, std::string, func_ptr> data;
 
   template <typename T>
   value(T t) : data{t} {}
@@ -234,10 +237,12 @@ struct value {
 struct env {
   std::unordered_map<std::string, value> vars;
   env* parent = nullptr;
+  bool inside_loop = false;
 
   static auto from_parent(env& parent) -> env {
     env child{};
     child.parent = &parent;
+    child.inside_loop = parent.inside_loop;
     return child;
   }
 
@@ -369,7 +374,8 @@ struct user_function : function {
     }
 
     ast::env func_env = ast::env::from_parent(env);
-
+    func_env.inside_loop = false;
+    
     for (auto &&[var, value] : std::views::zip(parameters, arguments)) {
       var->declare(func_env, value);
     }
@@ -638,11 +644,26 @@ struct while_statement : statement {
   auto exec(env &env) -> std::optional<value> override {
     while (sentinel->eval(env)) {
       ast::env new_env = ast::env::from_parent(env);
+      new_env.inside_loop = true;
       if (auto result = run_statements(new_env, body)) {
+        if (std::holds_alternative<continue_tag>(result.value().data)) {
+          continue;
+        }
         return result;
       }
     }
     return std::nullopt;
+  }
+};
+
+struct continue_statement : statement {
+  explicit continue_statement() = default;
+  auto exec(env &env) -> std::optional<value> override {
+    if (not env.inside_loop) {
+      fmt::println("continue cannot appear outside of a loop");
+      return std::nullopt;  
+    }
+    return continue_tag{};
   }
 };
 
@@ -1010,6 +1031,7 @@ struct while_statement {
 
 struct continue_statement {
   static constexpr auto rule = kw_continue >> dsl::semicolon;
+  static constexpr auto value = lexy::new_<ast::continue_statement, ast::statement_ptr>; 
 };
 
 struct statement {
@@ -1055,6 +1077,7 @@ auto main(int argc, char **argv) -> int try {
       for (auto&& arg : args) {
         std::string result = std::visit(ast::overload{
           [](ast::none) { return fmt::format("none"); },
+          [](ast::continue_tag) -> std::string { std::unreachable(); },
           [](ast::func_ptr v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
           [](auto&& v) { return fmt::format("{}", v); },
         }, arg.data);
