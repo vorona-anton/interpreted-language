@@ -3,3 +3,43 @@ while i < 10 {
     print(i);
     i = i + 1;
 }
+
+print("Skip over even numbers:");
+// Todo add modulo operator
+fn is_even(n) {
+    let i = 0;
+    let even = true;
+    while i < n {
+        even = !even;
+        i = i + 1;
+    }
+    return even;
+}
+
+i = 0;
+while i < 10 {
+    if is_even(i) {
+        i = i + 1;
+        continue;
+    }
+    print(i);
+    i = i + 1;
+}
+
+print("Invalid continue usage:");
+continue; // Prints error message and does nothing
+
+fn foo() {
+    continue; // Will act as noop with an error message
+    return 1;
+}
+
+print(foo()); // 1
+
+let b = true;
+while b {
+    foo(); // Still should fail
+
+    b = false;
+}
+
