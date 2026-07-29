@@ -44,9 +44,10 @@ template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
 
 struct none { auto operator==(none const&) const -> bool = default; };
 struct continue_tag { auto operator==(continue_tag const&) const -> bool = default; };
+struct break_tag { auto operator==(break_tag const&) const -> bool = default; };
 
 template <class T>
-constexpr std::string_view type_name_v = "unknown";  // comment: fallback for unhandled, no hard error
+constexpr std::string_view type_name_v = "unknown"; 
 
 template <>
 constexpr std::string_view type_name_v<none> = "none";
@@ -69,7 +70,7 @@ constexpr auto type_name_of = type_name_v<std::decay_t<T>>;
 struct value {
   // continue statements "return" a continue_tag that gets caught by inner-most loop
   // but this tag should never be leaked as an actual return value assignable to a variable
-  std::variant<none, continue_tag, bool, double, std::string, func_ptr> data;
+  std::variant<none, continue_tag, break_tag, bool, double, std::string, func_ptr> data;
 
   template <typename T>
   value(T t) : data{t} {}
@@ -667,6 +668,17 @@ struct continue_statement : statement {
   }
 };
 
+struct break_statement : statement {
+  explicit break_statement() = default;
+  auto exec(env &env) -> std::optional<value> override {
+    if (not env.inside_loop) {
+      fmt::println("break cannot appear outside of a loop");
+      return std::nullopt;  
+    }
+    return break_tag{};
+  }
+};
+
 auto run_statements(env &env, statement_vector &statements) -> std::optional<value> {
   for (auto &&statement : statements) {
     if (auto result = statement->exec(env)) {
@@ -1078,6 +1090,7 @@ auto main(int argc, char **argv) -> int try {
         std::string result = std::visit(ast::overload{
           [](ast::none) { return fmt::format("none"); },
           [](ast::continue_tag) -> std::string { std::unreachable(); },
+          [](ast::break_tag) -> std::string { std::unreachable(); },
           [](ast::func_ptr v) { return fmt::format("Func at {}", fmt::ptr(v.get())); },
           [](auto&& v) { return fmt::format("{}", v); },
         }, arg.data);
