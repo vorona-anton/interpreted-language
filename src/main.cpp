@@ -806,6 +806,7 @@ constexpr auto kw_fn = LEXY_KEYWORD("fn", id_rule);
 constexpr auto kw_return = LEXY_KEYWORD("return", id_rule);
 constexpr auto kw_while = LEXY_KEYWORD("while", id_rule);
 constexpr auto kw_continue = LEXY_KEYWORD("continue", id_rule);
+constexpr auto kw_break = LEXY_KEYWORD("break", id_rule);
 constexpr auto kw_if = LEXY_KEYWORD("if", id_rule);
 constexpr auto kw_else = LEXY_KEYWORD("else", id_rule);
 constexpr auto kw_true = LEXY_KEYWORD("true", id_rule);
@@ -834,7 +835,7 @@ struct none {
 
 struct identifier {
   static constexpr auto rule =
-      id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else, kw_true, kw_false, kw_while, kw_continue);
+      id_rule.reserve(kw_let, kw_fn, kw_return, kw_if, kw_else, kw_true, kw_false, kw_while, kw_continue, kw_break);
   static constexpr auto value = lexy::as_string<std::string>;
 };
 
@@ -1046,9 +1047,14 @@ struct continue_statement {
   static constexpr auto value = lexy::new_<ast::continue_statement, ast::statement_ptr>; 
 };
 
+struct break_statement {
+  static constexpr auto rule = kw_break >> dsl::semicolon;
+  static constexpr auto value = lexy::new_<ast::break_statement, ast::statement_ptr>; 
+};
+
 struct statement {
   static constexpr auto rule = dsl::p<variable_declaration> | dsl::p<function_declaration> | dsl::p<return_statement>
-    | dsl::p<if_statement> | dsl::p<while_statement> | dsl::p<continue_statement> | dsl::p<empty_statement>
+    | dsl::p<if_statement> | dsl::p<while_statement> | dsl::p<continue_statement> | dsl::p<break_statement> | dsl::p<empty_statement>
     | dsl::else_ >> dsl::p<expression_statement>;
   static constexpr auto value = lexy::forward<ast::statement_ptr>;
 };
