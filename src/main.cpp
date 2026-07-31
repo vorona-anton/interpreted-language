@@ -649,6 +649,8 @@ struct while_statement : statement {
       if (auto result = run_statements(new_env, body)) {
         if (std::holds_alternative<continue_tag>(result.value().data)) {
           continue;
+        } else if (std::holds_alternative<break_tag>(result.value().data)) {
+          break;
         }
         return result;
       }
