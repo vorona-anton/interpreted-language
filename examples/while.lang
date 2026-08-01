@@ -43,3 +43,31 @@ while b {
     b = false;
 }
 
+print("Break when i >= 5:");
+i = 0;
+while true {
+    if i == 5 {
+        break;
+    }
+    print(i);
+    i = i + 1;
+}
+
+print("Invalid break usage:");
+break; // Prints error message and does nothing
+
+fn bar() {
+    break; // Will act as noop with an error message
+    return 1;
+}
+
+print(bar()); // 1
+
+b = true;
+while b {
+    bar(); // Still should fail
+
+    b = false;
+}
+
+print("End");
