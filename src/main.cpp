@@ -1014,10 +1014,6 @@ struct expression_statement {
 };
 
 struct empty_statement {
-  struct useless_semicolon {
-    static constexpr auto name = "Unnessesary semicolon";
-  };
-
   static constexpr auto rule = dsl::semicolon;
   static constexpr auto value = lexy::new_<ast::empty_statement, ast::statement_ptr>;
 };
