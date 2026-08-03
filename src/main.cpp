@@ -637,10 +637,11 @@ struct if_statement : statement {
 
 struct while_statement : statement {
   expr_ptr sentinel;
+  expr_ptr next_expr;
   statement_vector body;
 
-  explicit while_statement(expr_ptr sentinel, statement_vector body)
-      : sentinel(std::move(sentinel)), body(std::move(body)) {}
+  explicit while_statement(expr_ptr sentinel, expr_ptr next_expr, statement_vector body)
+      : sentinel(std::move(sentinel)), next_expr(std::move(next_expr)), body(std::move(body)) {}
 
   auto exec(env &env) -> std::optional<value> override {
     while (sentinel->eval(env)) {
@@ -648,12 +649,15 @@ struct while_statement : statement {
       new_env.inside_loop = true;
       if (auto result = run_statements(new_env, body)) {
         if (std::holds_alternative<continue_tag>(result.value().data)) {
+          next_expr->eval(env);
           continue;
         } else if (std::holds_alternative<break_tag>(result.value().data)) {
           break;
         }
         return result;
       }
+
+      next_expr->eval(env);
     }
     return std::nullopt;
   }
