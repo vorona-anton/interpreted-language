@@ -1039,8 +1039,17 @@ struct if_statement {
   static constexpr auto value = lexy::new_<ast::if_statement, ast::statement_ptr>;
 };
 
+// Optional while-loop expression that will be run on ever loop end
+struct next_clause {
+  static constexpr auto rule = dsl::opt(dsl::semicolon >> dsl::p<expr>);
+  static constexpr auto value = lexy::callback<ast::expr_ptr>(
+    lexy::forward<ast::expr_ptr>,
+    [](lexy::nullopt) { return lexy::new_<ast::none_literal, ast::expr_ptr>(); }
+  );
+};
+
 struct while_statement {
-  static constexpr auto rule = kw_while >> dsl::p<expr> + dsl::p<scope_declaration>;
+  static constexpr auto rule = kw_while >> dsl::p<expr> + dsl::p<next_clause> + dsl::p<scope_declaration>;
   static constexpr auto value = lexy::new_<ast::while_statement, ast::statement_ptr>; 
 };
 
