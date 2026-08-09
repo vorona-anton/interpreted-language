@@ -427,12 +427,13 @@ struct builtin_function : function {
 };
 
 struct assignment : expression {
-  enum struct op_t { value };
+  enum struct op_t { regular, add };
 
   expr_ptr lhs;
+  op_t op;
   expr_ptr rhs;
-  explicit assignment(expr_ptr lhs, op_t, expr_ptr rhs)
-      : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
+  explicit assignment(expr_ptr lhs, op_t op, expr_ptr rhs)
+      : lhs{std::move(lhs)}, op{op}, rhs{std::move(rhs)} {}
 
   auto eval(env &env) -> value override {
     auto var = std::dynamic_pointer_cast<variable>(lhs);
@@ -441,7 +442,18 @@ struct assignment : expression {
       return none{};
     }
 
-    auto value = rhs->eval(env);
+    value value = rhs->eval(env);
+    switch (op) {
+      using enum op_t;
+    case regular:
+      break;
+    case add:
+      value = var->eval(env) + std::move(value);
+      break;
+    default:
+      std::unreachable();
+    }
+
     var->assign(env, value);
     return value;
   }
