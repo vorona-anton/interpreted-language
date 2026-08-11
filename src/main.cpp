@@ -898,7 +898,7 @@ struct relational : lexy::expression_production {
   };
 
   struct addition : dsl::infix_op_left {
-    static constexpr auto op = dsl::op<ast::binop::op_t::add>(dsl::lit_c<'+'>) /
+    static constexpr auto op = dsl::op<ast::binop::op_t::add>(dsl::not_followed_by(dsl::lit_c<'+'>, dsl::lit_c<'='>)) /
                                dsl::op<ast::binop::op_t::sub>(dsl::lit_c<'-'>);
     using operand = multiplication;
   };
@@ -975,7 +975,8 @@ struct expr : lexy::expression_production {
 
   struct assignment : dsl::infix_op_single {
     static constexpr auto op =
-        dsl::op<ast::assignment::op_t::value>(dsl::not_followed_by(dsl::equal_sign, dsl::equal_sign));
+      dsl::op<ast::assignment::op_t::regular>(dsl::not_followed_by(dsl::equal_sign, dsl::equal_sign))
+      / dsl::op<ast::assignment::op_t::add>(LEXY_LIT("+="));
     using operand = logical;
   };
 
