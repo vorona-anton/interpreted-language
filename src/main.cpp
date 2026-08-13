@@ -427,7 +427,7 @@ struct builtin_function : function {
 };
 
 struct assignment : expression {
-  enum struct op_t { regular, add };
+  enum struct op_t { regular, add, subtract, multiply, divide };
 
   expr_ptr lhs;
   op_t op;
@@ -449,6 +449,15 @@ struct assignment : expression {
       break;
     case add:
       value = var->eval(env) + std::move(value);
+      break;
+    case subtract:
+      value = var->eval(env) - std::move(value);
+      break;
+    case multiply:
+      value = var->eval(env) * std::move(value);
+      break;
+    case divide:
+      value = var->eval(env) / std::move(value);
       break;
     default:
       std::unreachable();
